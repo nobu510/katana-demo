@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>KATANA AI - エージェントAI総合業務管理</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Sans JP',sans-serif;background:#0a0a14;color:#fff;overflow:hidden;height:100vh}
+button{font-family:inherit;cursor:pointer;outline:none}textarea,input,select{font-family:inherit}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#444;border-radius:3px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes dotPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
+@keyframes au{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.au{animation:au .8s both}.au1{animation:au .8s .3s both}.au2{animation:au .8s .6s both}.au3{animation:au .8s .9s both}
+
+/* STORY OVERLAY */
+#storyOL{position:fixed;inset:0;z-index:1000;background:#0a0a14}
+.storyBg{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,#1a1a3e 0%,#0a0a14 70%);overflow:hidden}
+.storyBg::before{content:'';position:absolute;inset:-50%;background:repeating-conic-gradient(from 0deg,transparent 0deg 8deg,rgba(99,102,241,.03) 8deg 10deg);animation:spin 120s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scene{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;opacity:0;transition:opacity 1s;text-align:center;pointer-events:none}.scene.on{opacity:1;pointer-events:auto}
+.stag{font-size:12px;letter-spacing:6px;color:#6366f1;font-weight:600;text-transform:uppercase}
+.sh1{font-size:clamp(28px,5vw,48px);font-weight:900;margin:16px 0;line-height:1.3;background:linear-gradient(135deg,#fff,#a5b4fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sp{font-size:clamp(13px,2vw,16px);color:#9ca3af;line-height:1.8;max-width:600px}
+.snext{padding:14px 40px;border-radius:12px;border:1px solid #6366f1;background:transparent;color:#6366f1;font-size:14px;font-weight:600;transition:all .3s}
+.snext:hover{background:#6366f1;color:#fff}
+.scta{padding:18px 48px;border-radius:14px;border:none;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;font-size:16px;font-weight:700;transition:all .3s;box-shadow:0 4px 24px rgba(99,102,241,.4)}
+.scta:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(99,102,241,.5)}
+.s3{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
+.sc{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:24px 20px;flex:1;min-width:180px;max-width:260px;cursor:pointer;transition:all .3s}
+.sc:hover{border-color:#6366f1;background:rgba(99,102,241,.1)}
+#storyProg{position:fixed;top:0;left:0;height:3px;background:#6366f1;transition:width .5s;z-index:1001}
+
+/* APP LAYOUT */
+#appWrap{display:none;height:100vh}
+.app{display:flex;height:100vh;background:#f5f5f8}
+/* Sidebar with wave pattern like real KATANA */
+.sb{width:200px;background:#1e1e2e;flex-shrink:0;height:100vh;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.sb::before{content:'';position:absolute;inset:0;opacity:.06;background-image:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0c0 16.569-13.431 30-30 30C16.569 30 30 16.569 30 0zm0 60c0-16.569 13.431-30 30-30-16.569 0-30 13.431-30 30z' fill='%23fff' fill-rule='evenodd'/%3E%3C/svg%3E");background-size:30px 30px}
+.sb-logo{padding:14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #2a2a44;position:relative;z-index:1}
+.sb-logo-ic{width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center}
+.sb-logo-ic svg{width:20px;height:20px}
+.sb-nav{flex:1;overflow-y:auto;padding:8px 0;position:relative;z-index:1}
+.si{display:flex;align-items:center;gap:10px;padding:10px 16px;color:#8888a0;font-size:13px;cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.si:hover{background:rgba(255,255,255,.05);color:#c0c0d0}.si.on{background:rgba(99,102,241,.15);color:#fff;border-left-color:#6366f1}
+.si-i{width:18px;text-align:center;font-size:14px}.si-a{margin-left:auto;font-size:10px;color:#555}
+.ssub{overflow:hidden;max-height:0;transition:max-height .3s}.ssub.open{max-height:400px}
+.ssub .si{padding-left:44px;font-size:12px}
+.sb-ft{border-top:1px solid #2a2a44;padding:12px 16px;position:relative;z-index:1}
+.sb-us{padding:12px 16px;border-top:1px solid #2a2a44;display:flex;align-items:center;gap:10px;position:relative;z-index:1}
+.mn{flex:1;display:flex;flex-direction:column;min-width:0}
+.hd{padding:12px 24px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;color:#1a1a2e}
+.ct{flex:1;overflow-y:auto;padding:20px 24px;background:#f5f5f8;color:#1a1a2e}
+.ft{padding:8px 24px;background:#fff;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:10px;color:#9ca3af}
+.ft a{color:#6366f1;text-decoration:none;margin-left:16px}
+.card{background:#fff;border-radius:10px;border:1px solid #eee;padding:20px;margin-bottom:16px;animation:fadeUp .4s both}
+.pg{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+.pc{background:#fff;border-radius:10px;border:1px solid #eee;padding:18px;position:relative;overflow:hidden;animation:fadeUp .4s both;cursor:pointer;transition:box-shadow .2s}
+.pc:hover{box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.pc::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.pc.f::before{background:#7c3aed}.pc.n::before{background:#3b82f6}.pc.c::before{background:#10b981}
+.mb{display:flex;gap:2px;margin-bottom:16px}
+.mbtn{flex:1;padding:8px 0;border:none;border-radius:6px;font-size:11px;font-weight:500;background:#f3f4f6;color:#9ca3af;transition:all .2s}
+.mbtn.on{background:#6366f1;color:#fff;font-weight:600}.mbtn.past{background:#ede9fe;color:#6366f1}
+.tbl{width:100%;border-collapse:separate;border-spacing:0}
+.tbl th{background:#f9fafb;padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;border-bottom:1px solid #eee}
+.tbl td{padding:10px 12px;font-size:12px;border-bottom:1px solid #f3f4f6;color:#374151}
+.tbl tr:hover td{background:#f9fafb}
+.tbl .ar{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+.b-ct{background:#ede9fe;color:#7c3aed}.b-iv{background:#dbeafe;color:#3b82f6}.b-pd{background:#d1fae5;color:#059669}.b-pn{background:#f3f4f6;color:#9ca3af}
+.b-hi{background:#d1fae5;color:#059669}.b-md{background:#fef3c7;color:#b45309}.b-lo{background:#fee2e2;color:#dc2626}
+.dbox{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:14px;margin:12px 0;text-align:center}
+.prog{height:4px;background:#f3f4f6;border-radius:2px;overflow:hidden;margin-top:4px}
+.prog-f{height:4px;border-radius:2px;transition:width .8s ease-out}
+/* Chat panel */
+.ch{width:320px;background:#fff;border-left:1px solid #e5e7eb;display:flex;flex-direction:column;flex-shrink:0;height:100vh}
+.ch-hd{padding:12px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:12px}
+.ch-av{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,#fbbf24,#f59e0b);display:flex;align-items:center;justify-content:center;font-size:28px;position:relative;overflow:hidden}
+.ch-tabs{display:flex;border-bottom:1px solid #eee}
+.ch-tab{flex:1;padding:10px;text-align:center;font-size:12px;font-weight:500;color:#9ca3af;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
+.ch-tab.on{color:#6366f1;border-bottom-color:#6366f1;font-weight:600}
+.ch-ms{flex:1;overflow-y:auto;padding:14px;color:#374151}
+.cm{margin-bottom:14px;display:flex;flex-direction:column}.cm.u{align-items:flex-end}.cm.a{align-items:flex-start}
+.cb{max-width:90%;padding:12px 14px;border-radius:12px;font-size:12px;line-height:1.8;white-space:pre-line}
+.cb.u{background:#6366f1;color:#fff;border-bottom-right-radius:4px}.cb.a{background:#f3f4f6;color:#374151;border-bottom-left-radius:4px}
+.ca{display:flex;flex-direction:column;gap:6px;margin-top:8px;width:90%}
+.cab{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#fff;border:1px solid #e5e7eb;text-align:left;transition:all .2s;font-size:12px;color:#374151}.cab:hover{border-color:#6366f1;background:#f5f3ff}
+.dots{display:flex;gap:4px;padding:10px 14px;background:#f3f4f6;border-radius:12px;width:fit-content}
+.dots span{width:6px;height:6px;border-radius:50%;background:#aaa;animation:dotPulse .8s infinite}.dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
+.ch-in{padding:10px 14px;border-top:1px solid #eee;display:flex;gap:8px;align-items:flex-end}
+.ch-in textarea{flex:1;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;resize:none;outline:none;line-height:1.5;color:#374151}
+.ch-in textarea:focus{border-color:#6366f1}
+.ch-in button{width:34px;height:34px;border-radius:8px;border:none;background:#e5e7eb;color:#fff;font-size:15px;display:flex;align-items:center;justify-content:center}
+.rp{display:none;flex:1;overflow-y:auto;padding:14px;color:#374151}
+.ri{padding:12px;border:1px solid #eee;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all .2s}.ri:hover{border-color:#6366f1;background:#f5f3ff}
+.btn{padding:8px 20px;border-radius:8px;border:none;font-size:12px;font-weight:600;transition:all .2s}
+.bp{background:#6366f1;color:#fff}.bp:hover{background:#4f46e5}
+.bs{background:#f3f4f6;color:#374151}.bg{background:#10b981;color:#fff}
+.fi{width:100%;padding:8px 12px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;color:#1a1a2e;outline:none}.fi:focus{border-color:#6366f1}
+.fl{display:block;font-size:11px;font-weight:600;color:#6b7280;margin-bottom:4px}.fg{margin-bottom:12px}
+.qt{width:100%;border-collapse:collapse;margin:12px 0}
+.qt th{background:#f9fafb;padding:8px 12px;text-align:left;font-size:11px;font-weight:600;border:1px solid #e5e7eb}
+.qt td{padding:8px 12px;border:1px solid #e5e7eb;font-size:12px}.qt .ar{text-align:right}
+.uz{border:2px dashed #c7d2fe;border-radius:14px;padding:36px;text-align:center;background:#fafaff;cursor:pointer;transition:all .2s}.uz:hover{border-color:#6366f1;background:#f5f3ff}
+.bars{display:flex;align-items:flex-end;gap:4px;height:120px}
+.bcol{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bcb{display:flex;gap:2px;align-items:flex-end;height:100px}
+.bar{width:6px;border-radius:2px 2px 0 0;transition:height .8s ease-out}
+.tabs{display:flex;gap:4px;margin-bottom:16px}
+.tab{padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:12px;color:#6b7280;transition:all .2s;font-weight:500}
+.tab.on{background:#6366f1;color:#fff;border-color:#6366f1}
+</style>
+</head>
+<body>
+<!-- Login overlay -->
+<div id="loginOL" style="position:fixed;inset:0;background:#0a0a14;z-index:2000;display:flex;align-items:center;justify-content:center">
+<div style="text-align:center;max-width:360px;width:90%">
+<div style="font-size:48px;margin-bottom:16px">⚔️</div>
+<div style="font-size:32px;font-weight:900;background:linear-gradient(135deg,#6366f1,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent">KATANA AI</div>
+<div style="font-size:13px;color:#9ca3af;margin:8px 0 32px">デモにアクセスするにはパスワードを入力してください</div>
+<input id="loginPw" type="password" placeholder="パスワード" style="width:100%;padding:14px 16px;border-radius:12px;border:1px solid #333;background:#1a1a2e;color:#fff;font-size:16px;text-align:center;outline:none" onkeydown="if(event.key==='Enter')doLogin()">
+<div id="loginErr" style="color:#ef4444;font-size:12px;margin-top:8px;min-height:20px"></div>
+<button onclick="doLogin()" style="width:100%;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;font-size:16px;font-weight:700;margin-top:8px;cursor:pointer">ログイン</button>
+<div style="font-size:10px;color:#555;margin-top:24px">🔒 セキュリティ保護 | レート制限: 10回/分</div>
+</div>
+</div>
+<!-- Story overlay -->
+<div id="storyOL" style="display:none">
+<div class="storyBg"></div>
+<div id="storyProg" style="width:0"></div>
+<div class="scene on" id="sc0"><div class="stag au">J.NOVA presents</div><div class="sh1 au1">KATANA</div><div style="font-size:clamp(18px,3vw,28px);color:#e4e4e7;margin-top:12px;font-weight:700" class="au2">経営課題、一刀両断。</div><div class="sp au3" style="margin-top:24px">エージェントAI総合業務管理システム</div><button class="snext au3" style="margin-top:32px" onclick="goSc(1)">はじめる →</button></div>
+<div class="scene" id="sc1"><div class="stag au">QUESTION</div><div class="sh1 au1">あなたの会社は<br>大丈夫ですか？</div><div class="sp au2">契約が1億円あっても、手元に現金がなければ倒産します。<br>「3つの数字」の違いを見てみましょう。</div><div class="s3" style="margin-top:32px"><div class="sc au1" onclick="goSc(2)" style="text-align:center"><div style="font-size:40px;margin-bottom:12px">🔮</div><div style="font-size:16px;font-weight:700;color:#7c3aed">未来の数字</div><div style="font-size:12px;color:#9ca3af;margin-top:8px">契約済＋請求前<br>−原価−固定費−税金</div></div><div class="sc au2" onclick="goSc(2)" style="text-align:center"><div style="font-size:40px;margin-bottom:12px">📊</div><div style="font-size:16px;font-weight:700;color:#3b82f6">今の数字</div><div style="font-size:12px;color:#9ca3af;margin-top:8px">請求済ベース<br>−支払予定−日割固定費−税金</div></div><div class="sc au3" onclick="goSc(2)" style="text-align:center"><div style="font-size:40px;margin-bottom:12px">💰</div><div style="font-size:16px;font-weight:700;color:#10b981">キャッシュフロー</div><div style="font-size:12px;color:#9ca3af;margin-top:8px">入金ベース<br>−支払−日割固定費−税金</div></div></div></div>
+<div class="scene" id="sc2"><div class="stag au">SIMULATION</div><div class="sh1 au1">月を動かしてみてください</div><div class="sp au2">スライダーで月を変えると、3つの数字の差が見えます</div><div style="margin:24px 0;width:80%;max-width:500px" class="au2"><input type="range" id="storySlider" min="0" max="11" value="0" style="width:100%;accent-color:#7c3aed" oninput="updSM(this.value)"><div id="smLabel" style="text-align:center;font-size:14px;color:#9ca3af;margin-top:8px">4月</div></div><div class="s3" id="smCards"></div><button class="snext au3" onclick="goSc(3)" style="margin-top:20px">次へ →</button></div>
+<div class="scene" id="sc3"><div class="stag au">FEATURES</div><div class="sh1 au1">KATANAで<span style="color:#7c3aed">できること</span></div><div class="sp au2">売上・会計・在庫・人事を一元管理。<br>エージェントAIが勝手に計算、経営者はAIに聞くだけ。</div><div class="s3" style="margin-top:16px"><div class="sc au1" style="text-align:center;cursor:default"><div style="font-size:32px;margin-bottom:8px">📊</div><div style="font-size:14px;font-weight:700;color:#7c3aed">3視点ダッシュボード</div><div style="font-size:11px;color:#9ca3af;margin-top:6px">未来・今・CF<br>案件別・社員別利益</div></div><div class="sc au2" style="text-align:center;cursor:default"><div style="font-size:32px;margin-bottom:8px">🤖</div><div style="font-size:14px;font-weight:700;color:#3b82f6">AIに聞くだけ</div><div style="font-size:11px;color:#9ca3af;margin-top:6px">会計知識ゼロでも<br>経営判断できる</div></div><div class="sc au3" style="text-align:center;cursor:default"><div style="font-size:32px;margin-bottom:8px">👥</div><div style="font-size:14px;font-weight:700;color:#10b981">一人当たり利益</div><div style="font-size:11px;color:#9ca3af;margin-top:6px">社員の採番管理で<br>時間利益が瞬時に</div></div></div><button class="scta au3" style="margin-top:28px" onclick="startApp()">▶ 体験してみる</button></div>
+</div>
+<!-- APP -->
+<div id="appWrap">
+<div class="app">
+<nav class="sb">
+  <div class="sb-logo"><div class="sb-logo-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M8 4c0 0 2 1 4 1s4-1 4-1v3c0 1-1.5 2-4 2s-4-1-4-2V4z" fill="#4fb5c9"/><rect x="11" y="9" width="2" height="11" rx="1" fill="#4fb5c9"/><path d="M8 20h8" stroke="#4fb5c9" stroke-width="2" stroke-linecap="round"/></svg></div><div style="color:#fff;font-size:14px;font-weight:700;letter-spacing:1px">KATANA AI</div></div>
+  <div class="sb-nav" id="sNav"></div>
+  <div class="sb-ft"><div style="color:#8888a0;font-size:12px;cursor:pointer">↗ 人事労務管理へ</div></div>
+  <div class="sb-us"><div style="width:32px;height:32px;border-radius:50%;background:#6366f1;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700">G</div><div><div style="color:#fff;font-size:12px;font-weight:600">GOTO</div><div style="color:#6b7280;font-size:10px">オーナー</div></div></div>
+</nav>
+<div class="mn">
+  <header class="hd"><div><div id="pgT" style="font-size:16px;font-weight:700">ホーム</div><div id="pgS" style="font-size:11px;color:#9ca3af;margin-top:2px">予実管理ダッシュボード</div></div><div style="display:flex;align-items:center;gap:16px;font-size:12px;color:#9ca3af"><span>📅 2026年度</span><span style="cursor:pointer">🔔</span><span style="cursor:pointer">⚙️</span></div></header>
+  <div class="ct" id="mCt"></div>
+  <footer class="ft"><span>© 2026 AI精算アシスタント All rights reserved.</span><div><a href="#">よくある質問</a><a href="#">利用規約</a><a href="#">プライバシーポリシー</a></div></footer>
+</div>
+<aside class="ch">
+  <div class="ch-hd"><div class="ch-av">⚔️</div><div><div style="font-size:14px;font-weight:700;color:#1a1a2e">AI精算アシスタント</div><div style="font-size:10px;color:#10b981;display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#10b981;display:inline-block"></span>Claude AI 接続中</div></div><span style="margin-left:auto;color:#ccc;font-size:16px;cursor:pointer">›</span></div>
+  <div class="ch-tabs"><div class="ch-tab on" id="tChat" onclick="setTab('chat')">💬 チャット</div><div class="ch-tab" id="tRag" onclick="setTab('rag')">🔍 RAG検索</div></div>
+  <div class="ch-ms" id="chMs"></div>
+  <div class="rp" id="rP"></div>
+  <div class="ch-in"><textarea id="chIn" rows="2" placeholder='例：「今月儲かってる？」「A社の案件は？」'></textarea><button id="sBtn" onclick="sendChat()">↑</button></div>
+</aside>
+</div></div>
+<script>
+const MO=["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
+// Clients with project details, assigned staff
+const CL=[
+  {id:"A",nm:"A社",fl:"株式会社アルファ",pj:"クラウド導入",amt:4800000,cst:1920000,cm:0,im:1,pm:3,ct:"田中太郎",staff:[{name:"田中",hrs:80,rate:3000},{name:"佐藤",hrs:40,rate:2800}],progress:100,inv:[]},
+  {id:"B",nm:"B社",fl:"株式会社ベータ",pj:"AI研修",amt:3200000,cst:960000,cm:1,im:2,pm:4,ct:"佐藤花子",staff:[{name:"鈴木",hrs:60,rate:3200},{name:"高橋",hrs:30,rate:2500}],progress:85,inv:[]},
+  {id:"C",nm:"C社",fl:"株式会社ガンマ",pj:"SaaS開発",amt:12000000,cst:4800000,cm:2,im:4,pm:6,ct:"鈴木一郎",staff:[{name:"田中",hrs:200,rate:3000},{name:"山本",hrs:160,rate:3500},{name:"中村",hrs:120,rate:2800}],progress:70,inv:[{item:"サーバー",qty:2,cost:300000}]},
+  {id:"D",nm:"D社",fl:"株式会社デルタ",pj:"DX支援",amt:6500000,cst:2600000,cm:3,im:5,pm:7,ct:"高橋次郎",staff:[{name:"佐藤",hrs:100,rate:2800},{name:"高橋",hrs:80,rate:2500}],progress:55,inv:[]},
+  {id:"E",nm:"E社",fl:"株式会社イプシロン",pj:"セキュリティ",amt:8000000,cst:3200000,cm:4,im:6,pm:8,ct:"渡辺三郎",staff:[{name:"鈴木",hrs:120,rate:3200},{name:"渡辺",hrs:90,rate:3000}],progress:40,inv:[{item:"FW機器",qty:3,cost:150000}]},
+  {id:"F",nm:"F社",fl:"株式会社ゼータ",pj:"データ分析",amt:5500000,cst:2200000,cm:5,im:7,pm:9,ct:"伊藤四郎",staff:[{name:"山本",hrs:80,rate:3500},{name:"加藤",hrs:60,rate:2600}],progress:30,inv:[]},
+  {id:"G",nm:"G社",fl:"株式会社エータ",pj:"AI Agent開発",amt:25000000,cst:10000000,cm:6,im:8,pm:10,ct:"山本五郎",staff:[{name:"田中",hrs:300,rate:3000},{name:"鈴木",hrs:250,rate:3200},{name:"山本",hrs:200,rate:3500},{name:"渡辺",hrs:150,rate:3000}],progress:20,inv:[{item:"GPU",qty:4,cost:500000}]},
+  {id:"H",nm:"H社",fl:"株式会社シータ",pj:"研修20名",amt:4000000,cst:1200000,cm:7,im:8,pm:10,ct:"中村六郎",staff:[{name:"高橋",hrs:60,rate:2500},{name:"加藤",hrs:40,rate:2600}],progress:15,inv:[]},
+  {id:"I",nm:"I社",fl:"株式会社イオタ",pj:"基幹連携",amt:9000000,cst:3600000,cm:8,im:9,pm:11,ct:"小林七郎",staff:[{name:"佐藤",hrs:150,rate:2800},{name:"中村",hrs:100,rate:2800}],progress:10,inv:[{item:"ライセンス",qty:5,cost:200000}]},
+  {id:"J",nm:"J社",fl:"株式会社カッパ",pj:"IoT開発",amt:7200000,cst:2880000,cm:9,im:10,pm:11,ct:"加藤八郎",staff:[{name:"渡辺",hrs:120,rate:3000},{name:"加藤",hrs:100,rate:2600}],progress:5,inv:[{item:"センサー",qty:20,cost:50000}]},
+  {id:"K",nm:"K社",fl:"株式会社ラムダ",pj:"AI監査",amt:3800000,cst:1520000,cm:10,im:11,pm:11,ct:"吉田九郎",staff:[{name:"鈴木",hrs:60,rate:3200}],progress:0,inv:[]},
+  {id:"L",nm:"L社",fl:"株式会社ミュー",pj:"全社DX",amt:15000000,cst:6000000,cm:11,im:11,pm:11,ct:"佐々木十郎",staff:[{name:"田中",hrs:200,rate:3000},{name:"山本",hrs:180,rate:3500}],progress:0,inv:[]}
+];
+// Staff master
+const STAFF=[
+  {id:"S001",name:"田中",full:"田中太郎",role:"シニアエンジニア",rate:3000,salary:450000},
+  {id:"S002",name:"佐藤",full:"佐藤花子",role:"プロジェクトマネージャー",rate:2800,salary:420000},
+  {id:"S003",name:"鈴木",full:"鈴木一郎",role:"AIエンジニア",rate:3200,salary:480000},
+  {id:"S004",name:"高橋",full:"高橋次郎",role:"ジュニアエンジニア",rate:2500,salary:350000},
+  {id:"S005",name:"山本",full:"山本五郎",role:"リードエンジニア",rate:3500,salary:520000},
+  {id:"S006",name:"渡辺",full:"渡辺三郎",role:"インフラエンジニア",rate:3000,salary:450000},
+  {id:"S007",name:"中村",full:"中村六郎",role:"デザイナー",rate:2800,salary:400000},
+  {id:"S008",name:"加藤",full:"加藤八郎",role:"テスター",rate:2600,salary:380000}
+];
+const FX=2800000,TX=.3,TGT=104000000;
+const RCP=[{store:"ヨドバシカメラ 梅田",date:"2026/04/15",items:[{n:"USBケーブル",p:1280},{n:"マウスパッド",p:980}],total:2260,cat:"消耗品費"},{store:"タクシー（大阪→梅田）",date:"2026/04/15",items:[{n:"タクシー運賃",p:2340}],total:2340,cat:"交通費"},{store:"スターバックス 本町店",date:"2026/04/16",items:[{n:"コーヒー×2",p:780},{n:"サンドイッチ",p:520}],total:1300,cat:"会議費"}];
+const RAG=[{t:"売上管理マニュアル v2.3",tg:"営業",c:"#7c3aed",tx:"売上の計上基準は納品完了時点。前受金の扱いは経理部確認の上、月次処理。"},{t:"経費精算規定",tg:"経理",c:"#3b82f6",tx:"交通費は実費精算。タクシーは事前承認必要。5,000円以上は領収書必須。"},{t:"月次決算チェックリスト",tg:"会計",c:"#f97316",tx:"1.仕訳整合性 2.前月比異常値 3.消費税区分 4.修正仕訳"},{t:"AI Agent要件定義",tg:"開発",c:"#7c3aed",tx:"G社向け: 自律タスク実行、マルチモーダル、社内データ連携。"},{t:"2026年度予算",tg:"予算",c:"#ef4444",tx:"売上目標:1億400万円。固定費月280万円。利益率35%以上。"},{t:"見積ガイドライン",tg:"営業",c:"#7c3aed",tx:"有効期限30日。値引は上長承認で最大15%。"}];
+
+let curSc=0,cm=0,pg="home",msgs=[],hist=[],quotes=[],oD=false,oA=0,cR=0,oS={docs:true},cTab="chat",typi=false,dashTab="overview",authToken="";
+async function doLogin(){var pw=document.getElementById('loginPw').value;if(!pw)return;try{var rp=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});var dt=await rp.json();if(dt.ok){authToken=dt.token;document.getElementById('loginOL').style.opacity='0';document.getElementById('loginOL').style.transition='opacity .5s';setTimeout(function(){document.getElementById('loginOL').style.display='none';document.getElementById('storyOL').style.display=''},600)}else{document.getElementById('loginErr').textContent=dt.error||'パスワードが違います'}}catch(e){document.getElementById('loginErr').textContent='接続エラー'}}
+
+function fmt(n){const a=Math.abs(n);if(a>=1e8)return(n/1e8).toFixed(1)+"億";if(a>=1e4)return Math.round(n/1e4).toLocaleString()+"万";return n.toLocaleString()}
+function fF(n){return"¥"+Math.abs(n).toLocaleString()}
+function gSt(c,m){if(m>=c.pm)return"pd";if(m>=c.im)return"iv";if(m>=c.cm)return"ct";return"pn"}
+function gSL(s){return{pd:"入金済",iv:"請求済",ct:"契約済",pn:"未契約"}[s]}
+function gSC(s){return{pd:"b-pd",iv:"b-iv",ct:"b-ct",pn:"b-pn"}[s]}
+function calc(m){
+  let fu={r:0,c:0,n:0},nw={r:0,c:0,n:0},cf={r:0,c:0,n:0};
+  CL.forEach(c=>{if(m>=c.cm){fu.r+=c.amt;fu.c+=c.cst;fu.n++}if(m>=c.im){nw.r+=c.amt;nw.c+=c.cst;nw.n++}if(m>=c.pm){cf.r+=c.amt;cf.c+=c.cst;cf.n++}});
+  function fin(d,mo){const r=d.r+oA,co=d.c,f=FX*mo,g=r-co-f,t=Math.max(0,g*TX);return{rev:r,cost:co,fixed:f,tax:t,profit:g-t,cnt:d.n}}
+  return{future:fin(fu,m+1),now:fin(nw,m+1),cash:fin(cf,Math.max(1,m))}
+}
+// Story
+function goSc(n){document.getElementById('sc'+curSc).classList.remove('on');curSc=n;document.getElementById('sc'+n).classList.add('on');document.getElementById('storyProg').style.width=((n/3)*100)+'%';if(n===2)updSM(0)}
+function updSM(v){v=parseInt(v);document.getElementById('smLabel').textContent=MO[v];const d=calc(v);document.getElementById('smCards').innerHTML=[{l:"🔮 未来",c:"#7c3aed",v:d.future.profit},{l:"📊 今",c:"#3b82f6",v:d.now.profit},{l:"💰 CF",c:"#10b981",v:d.cash.profit}].map(p=>`<div class="sc" style="text-align:center;cursor:default;min-width:140px"><div style="font-size:12px;color:${p.c}">${p.l}</div><div style="font-size:24px;font-weight:800;margin:8px 0;color:${p.v>=0?'#fff':'#ef4444'}">${p.v>=0?'+':''}${fF(p.v)}</div></div>`).join('')}
+function startApp(){document.getElementById('storyOL').style.opacity='0';document.getElementById('storyOL').style.pointerEvents='none';document.getElementById('appWrap').style.display='block';setTimeout(()=>document.getElementById('storyOL').style.display='none',1000);initApp()}
+// SIDEBAR
+const MN=[{i:"🏠",l:"ホーム",id:"home"},{i:"🤖",l:"AI精算アシスタント",id:"ai"},{i:"📷",l:"レシートスキャン",id:"ocr"},{i:"📈",l:"AIトレンド検索",id:"trend"},{i:"📄",l:"書類",id:"docs",ar:1,sub:[{i:"📋",l:"ファイル確認",id:"files"},{i:"📝",l:"見積書",id:"quote"},{i:"📄",l:"見積依頼フォーム",id:"qreq"},{i:"📦",l:"発注・納品書",id:"order"},{i:"📄",l:"請求書",id:"invoice"},{i:"📑",l:"契約書",id:"contract"},{i:"🧾",l:"領収書",id:"receipt"}]},{i:"💳",l:"経費精算",id:"expense",ar:1},{i:"📊",l:"営業管理",id:"sales",ar:1},{i:"📒",l:"会計帳簿",id:"acct",ar:1},{i:"📋",l:"決算",id:"settle",ar:1},{i:"⚙️",l:"会計各種設定",id:"setting",ar:1},{i:"📦",l:"在庫管理",id:"inv",ar:1},{i:"💬",l:"社内チャット",id:"chat2"}];
+function rSB(){let h='<div class="si" style="color:#6366f1;padding:8px 16px;font-size:16px" onclick="location.reload()">‹</div>';MN.forEach(m=>{const isOn=m.id===pg||(m.sub&&m.sub.some(s=>s.id===pg));h+=`<div class="si ${isOn&&!m.sub?'on':''}" onclick="${m.sub?`tgS('${m.id}')`:`gP('${m.id}')`}"><span class="si-i">${m.i}</span>${m.l}${m.ar?`<span class="si-a">${oS[m.id]?'∨':'›'}</span>`:''}</div>`;if(m.sub){h+=`<div class="ssub ${oS[m.id]?'open':''}">`;m.sub.forEach(s=>h+=`<div class="si ${s.id===pg?'on':''}" onclick="gP('${s.id}')"><span class="si-i">${s.i}</span>${s.l}</div>`);h+='</div>'}});document.getElementById('sNav').innerHTML=h}
+function tgS(id){oS[id]=!oS[id];rSB()}
+function gP(id){pg=id;rSB();const t={home:['ホーム','予実管理ダッシュボード'],ocr:['レシートスキャン','AI OCR 自動読取'],quote:['見積書','作成・管理'],trend:['AIトレンド検索','業界動向・競合分析'],ai:['AI精算アシスタント','経費・仕訳・税務をAIがサポート']};const tt=t[id]||[MN.flatMap(m=>[m,...(m.sub||[])]).find(x=>x.id===id)?.l||id,''];document.getElementById('pgT').textContent=tt[0];document.getElementById('pgS').textContent=tt[1];if(id==='home')rDash();else if(id==='ocr')rOCR();else if(id==='quote')rQuote();else if(id==='trend')rTrend();else if(id==='ai')rAIPage();else rCS()}
+
+// DASHBOARD
+function rDash(){
+  const d=calc(cm),gap=d.future.profit-d.cash.profit,ach=Math.round(d.future.rev/TGT*100);
+  const P=[{k:"future",l:"未来の数字",s:"契約済＋請求前",ic:"🔮",co:"#7c3aed",cl:"f",d:d.future,rl:"契約済売上"},{k:"now",l:"今の数字",s:"請求済ベース",ic:"📊",co:"#3b82f6",cl:"n",d:d.now,rl:"請求済売上"},{k:"cash",l:"キャッシュフロー",s:"入金ベース",ic:"💰",co:"#10b981",cl:"c",d:d.cash,rl:"入金額"}];
+  let h=`<div style="font-size:18px;font-weight:700;margin-bottom:16px">Welcomeback, GOTO</div>`;
+  if(oD)h+=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#059669">✅ OCR反映済（+${fF(oA)}）</div>`;
+  // Month
+  h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:14px;font-weight:600">📅 ${MO[cm]} <span style="font-size:11px;font-weight:400;color:#9ca3af">/ 2026年度</span></span><div style="display:flex;gap:6px"><button onclick="chM(-1)" class="btn bs" style="padding:5px 12px;font-size:14px">◀</button><button onclick="chM(1)" class="btn bs" style="padding:5px 12px;font-size:14px">▶</button></div></div><div class="mb">${MO.map((m,i)=>`<button class="mbtn ${i===cm?'on':i<cm?'past':''}" onclick="gM(${i})">${m}</button>`).join('')}</div></div>`;
+  // 3 Cards
+  h+=`<div class="pg">${P.map(p=>`<div class="pc ${p.cl}" onclick="askAI('${p.l}の内訳を詳しく教えて')"><div style="font-size:11px;color:#9ca3af;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:${p.co};display:inline-block"></span>${p.ic} ${p.l}<span style="margin-left:auto;font-size:10px">${p.s}</span></div><div style="font-size:26px;font-weight:800;margin:8px 0;color:${p.d.profit>=0?'#1a1a2e':'#ef4444'}">${p.d.profit>=0?'+':'−'}${fF(Math.abs(p.d.profit))}</div><div style="font-size:11px;color:#6b7280;line-height:2.2">${p.rl}<span style="float:right;color:${p.co}">+${fF(p.d.rev)}</span><br>原価<span style="float:right;color:#ef4444">−${fF(p.d.cost)}</span><br>固定費(月280万×${p.k==='cash'?Math.max(1,cm):cm+1}月)<span style="float:right;color:#f97316">−${fF(p.d.fixed)}</span><br>税金(30%)<span style="float:right;color:#eab308">−${fF(p.d.tax)}</span></div><div style="margin-top:8px;padding-top:8px;border-top:1px solid #f3f4f6;font-size:10px;color:#9ca3af">対象: <b style="color:${p.co}">${p.d.cnt}社</b> <span style="float:right;color:#6366f1;cursor:pointer">→ AIに聞く</span></div></div>`).join('')}</div>`;
+  // Gap
+  if(gap>0){var wMsg=gap>10000000?'\u{1F6A8} \u904B\u8EE2\u8CC7\u91D1\u304C1,000\u4E07\u5186\u8D85\u3002\u8ACB\u6C42\u30B5\u30A4\u30AF\u30EB\u306E\u77ED\u7E2E\u307E\u305F\u306F\u878D\u8CC7\u691C\u8A0E\u3092\u63A8\u5968\u3057\u307E\u3059':gap>5000000?'\u26A0\uFE0F \u904B\u8EE2\u8CC7\u91D1\u304C500\u4E07\u5186\u8D85\u3002\u8ACB\u6C42\u66F8\u306E\u65E9\u671F\u767A\u884C\u3067\u6539\u5584\u3067\u304D\u307E\u3059':'\u2705 \u904B\u8EE2\u8CC7\u91D1\u306F\u7BA1\u7406\u53EF\u80FD\u306A\u7BC4\u56F2\u3067\u3059';h+=`<div class="dbox"><div style="font-size:11px;color:#92400e">⚠️ 未来とキャッシュフローの差額 ＝ 必要運転資金</div><div style="font-size:20px;font-weight:800;color:#b45309;margin:4px 0">${fF(gap)}</div><div style="font-size:11px;color:#6b7280;margin-top:4px;padding-top:6px;border-top:1px dashed #e5e7eb">🤖 <b>KATANA AI:</b> ${wMsg}</div></div>`}
+  // Assets section
+  var recvAmt=0;CL.forEach(function(c){var st=gSt(c,cm);if(st==='iv')recvAmt+=c.amt});
+  var FASSETS=[{nm:'サーバー設備',val:3200000,dep:800000},{nm:'開発用PC(8台)',val:2400000,dep:600000},{nm:'ソフトウェアライセンス',val:1800000,dep:900000},{nm:'オフィス内装',val:1500000,dep:300000}];
+  var faTotal=FASSETS.reduce(function(s,a){return s+a.val-a.dep},0);
+  var totalAssets=recvAmt+faTotal+d.cash.rev;
+  h+=`<div class="card" style="margin-top:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px">💎 資産状況（${MO[cm]}時点）</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px"><div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;color:#6b7280">💰 現金（入金済）</div><div style="font-size:16px;font-weight:800;color:#059669;margin-top:4px">${fF(d.cash.rev)}</div></div><div style="background:#fef3c7;border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;color:#6b7280">📄 売掛金（請求済未入金）</div><div style="font-size:16px;font-weight:800;color:#d97706;margin-top:4px">${fF(recvAmt)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">${CL.filter(function(c){return gSt(c,cm)==='iv'}).map(function(c){return c.nm}).join(', ')||'なし'}</div></div><div style="background:#eff6ff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;color:#6b7280">🏢 固定資産（簿価）</div><div style="font-size:16px;font-weight:800;color:#2563eb;margin-top:4px">${fF(faTotal)}</div></div></div><div style="display:flex;justify-content:space-between;padding:8px 12px;background:#f9fafb;border-radius:8px;margin-bottom:12px"><span style="font-size:12px;font-weight:700;color:#1a1a2e">📊 総資産</span><span style="font-size:16px;font-weight:800;color:#1a1a2e">${fF(totalAssets)}</span></div><div style="font-size:11px;color:#6b7280"><b>固定資産明細:</b></div><table class="tbl" style="margin-top:6px"><thead><tr><th>資産名</th><th class="ar">取得価額</th><th class="ar">減価償却累計</th><th class="ar">簿価</th></tr></thead><tbody>${FASSETS.map(function(a){return '<tr><td>'+a.nm+'</td><td class="ar">'+fF(a.val)+'</td><td class="ar" style="color:#ef4444">'+fF(a.dep)+'</td><td class="ar" style="color:#2563eb;font-weight:600">'+fF(a.val-a.dep)+'</td></tr>'}).join('')}</tbody></table></div>`;
+  // Tabs
+  h+=`<div class="tabs"><button class="tab ${dashTab==='overview'?'on':''}" onclick="dashTab='overview';rDash()">📊 収益サマリ</button><button class="tab ${dashTab==='projects'?'on':''}" onclick="dashTab='projects';rDash()">📋 案件別利益</button><button class="tab ${dashTab==='staff'?'on':''}" onclick="dashTab='staff';rDash()">👥 社員別利益</button></div>`;
+  if(dashTab==='overview'){
+    // Donut + legend
+    const r=65,sw=14,ci=2*Math.PI*r,sg=[{v:Math.max(0,d.future.profit),c:"#7c3aed"},{v:Math.max(0,d.now.profit),c:"#3b82f6"},{v:Math.max(0,d.cash.profit),c:"#10b981"}],tot=sg.reduce((s,x)=>s+x.v,0);let of2=0,cr='';sg.forEach(s=>{const p=tot>0?s.v/tot:0,dl=ci*p;cr+=`<circle cx="90" cy="90" r="${r}" fill="none" stroke="${s.c}" stroke-width="${sw}" stroke-dasharray="${dl} ${ci-dl}" stroke-dashoffset="${-ci*of2}" stroke-linecap="round" transform="rotate(-90 90 90)"/>`;of2+=p});
+    h+=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:14px">収益サマリ</div><div style="display:flex;align-items:center;gap:32px"><svg width="180" height="180" viewBox="0 0 180 180"><circle cx="90" cy="90" r="${r}" fill="none" stroke="#f0f0f0" stroke-width="${sw}"/>${cr}<text x="90" y="85" text-anchor="middle" font-size="11" fill="#9ca3af">${MO[cm]}利益</text><text x="90" y="105" text-anchor="middle" font-size="15" fill="#1a1a2e" font-weight="700">${fF(d.future.profit)}</text></svg><div style="flex:1"><div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#6b7280;border-bottom:1px solid #f3f4f6"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#7c3aed;margin-right:6px"></span>今日までの売上</span><span style="font-weight:600;color:#1a1a2e">${fF(d.future.rev)}</span></div><div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#6b7280;border-bottom:1px solid #f3f4f6"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3b82f6;margin-right:6px"></span>今日までの利益</span><span style="font-weight:600;color:#1a1a2e">${fF(d.now.profit)}</span></div><div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#6b7280;border-bottom:1px solid #f3f4f6"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;margin-right:6px"></span>明日以降の売上</span><span style="font-weight:600;color:#1a1a2e">${fF(Math.max(0,d.future.rev-d.now.rev))}</span></div><div style="margin-top:12px;font-size:12px;color:#6b7280">年間目標達成率: <b style="color:#6366f1">${ach}%</b></div><div class="prog"><div class="prog-f" style="width:${Math.min(100,ach)}%;background:#6366f1"></div></div></div></div></div>`;
+    // Bar chart
+    h+=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:14px">月別利益推移</div><div class="bars">${MO.map((m,i)=>{const dd=calc(i),mx=40000000;return`<div class="bcol" style="opacity:${i<=cm?1:.15}"><div class="bcb"><div class="bar" style="background:#7c3aed;height:${Math.max(2,Math.max(0,dd.future.profit)/mx*90)}px"></div><div class="bar" style="background:#3b82f6;height:${Math.max(2,Math.max(0,dd.now.profit)/mx*90)}px"></div><div class="bar" style="background:#10b981;height:${Math.max(2,Math.max(0,dd.cash.profit)/mx*90)}px"></div></div><span style="font-size:9px;color:${i===cm?'#6366f1':'#ccc'};font-weight:${i===cm?700:400}">${m}</span></div>`}).join('')}</div><div style="display:flex;gap:16px;justify-content:center;margin-top:12px">${P.map(p=>`<span style="font-size:10px;color:#9ca3af"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${p.co};margin-right:4px"></span>${p.l}</span>`).join('')}</div></div>`;
+  } else if(dashTab==='projects'){
+    // Project profit table
+    h+=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:14px">📋 案件別利益（${MO[cm]}時点）</div><table class="tbl"><thead><tr><th>案件</th><th>取引先</th><th class="ar">売上</th><th class="ar">原価</th><th class="ar">人件費</th><th class="ar">粗利</th><th>利益率</th><th>進捗</th><th>ステータス</th></tr></thead><tbody>${CL.map(c=>{const st=gSt(c,cm),labCost=c.staff.reduce((s,sf)=>s+sf.hrs*sf.rate,0),matCost=c.inv.reduce((s,iv)=>s+iv.qty*iv.cost,0),gross=c.amt-labCost-matCost,rate=Math.round(gross/c.amt*100),prog=cm>=c.cm?Math.min(100,c.progress+cm*5):0;return st==='pn'?'':`<tr onclick="askAI('${c.nm}の案件詳細を教えて')" style="cursor:pointer"><td><b>${c.pj}</b></td><td>${c.nm}<br><span style="font-size:10px;color:#9ca3af">${c.ct}</span></td><td class="ar">${fF(c.amt)}</td><td class="ar" style="color:#ef4444">${fF(matCost)}</td><td class="ar" style="color:#f97316">${fF(labCost)}</td><td class="ar" style="color:${gross>0?'#059669':'#ef4444'}">${fF(gross)}</td><td><span class="badge ${rate>=50?'b-hi':rate>=30?'b-md':'b-lo'}">${rate}%</span></td><td><div class="prog" style="width:60px"><div class="prog-f" style="width:${prog}%;background:#6366f1"></div></div><span style="font-size:10px;color:#9ca3af">${prog}%</span></td><td><span class="badge ${gSC(st)}">${gSL(st)}</span></td></tr>`}).join('')}</tbody></table></div>`;
+  } else if(dashTab==='staff'){
+    // Staff profit table
+    const staffData=STAFF.map(s=>{let totalHrs=0,totalRev=0,projects=[];CL.forEach(c=>{if(cm<c.cm)return;c.staff.forEach(sf=>{if(sf.name===s.name){totalHrs+=sf.hrs;totalRev+=c.amt*(sf.hrs/c.staff.reduce((a,x)=>a+x.hrs,0));projects.push(c.nm)}})});const labCost=totalHrs*s.rate,profit=totalRev-labCost-s.salary*(cm+1),hourProfit=totalHrs>0?Math.round((totalRev-labCost)/totalHrs):0;return{...s,totalHrs,totalRev,labCost,profit,hourProfit,projects}});
+    h+=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:14px">👥 社員別利益（${MO[cm]}時点）</div><table class="tbl"><thead><tr><th>採番</th><th>社員名</th><th>役職</th><th>担当案件</th><th class="ar">稼働時間</th><th class="ar">売上貢献</th><th class="ar">人件費</th><th class="ar">時間利益</th></tr></thead><tbody>${staffData.filter(s=>s.totalHrs>0).sort((a,b)=>b.hourProfit-a.hourProfit).map(s=>`<tr onclick="askAI('${s.full}の業績を詳しく教えて')" style="cursor:pointer"><td style="font-weight:600;color:#6366f1">${s.id}</td><td><b>${s.full}</b></td><td style="font-size:11px;color:#9ca3af">${s.role}</td><td style="font-size:11px">${s.projects.join(', ')}</td><td class="ar">${s.totalHrs}h</td><td class="ar">${fF(s.totalRev)}</td><td class="ar" style="color:#f97316">${fF(s.labCost)}</td><td class="ar"><span class="badge ${s.hourProfit>=3000?'b-hi':s.hourProfit>=1000?'b-md':'b-lo'}">¥${s.hourProfit.toLocaleString()}/h</span></td></tr>`).join('')}</tbody></table></div>`;
+  }
+  // News
+  h+=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:14px">社内ニュース</div><div style="text-align:center;padding:32px;color:#9ca3af;font-size:13px">ニュースがありません</div></div>`;
+  document.getElementById('mCt').innerHTML=h;
+  addMsg(1,`📅 ${MO[cm]}のダッシュボード\n🔮 未来: ${d.future.profit>=0?'+':''}${fF(d.future.profit)}\n📊 今: ${d.now.profit>=0?'+':''}${fF(d.now.profit)}\n💰 CF: ${d.cash.profit>=0?'+':''}${fF(d.cash.profit)}\n\n何でも聞いてください！`,null,true)
+}
+function gM(m){cm=m;rDash()}
+function chM(d){gM(Math.max(0,Math.min(11,cm+d)))}
+// OCR
+function rOCR(){document.getElementById('mCt').innerHTML=`<div style="font-size:18px;font-weight:700;margin-bottom:16px">レシートスキャン</div><div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:14px">📷 AI OCRスキャン</div><div class="uz" id="ocrZ" onclick="document.getElementById('fIn').click()"><div style="font-size:48px;margin-bottom:12px">📁</div><div style="font-size:14px;font-weight:600;color:#6366f1">クリックしてレシート画像を選択</div><div style="font-size:12px;color:#9ca3af;margin-top:8px">JPG/PNG対応 · Claude Vision AIが自動解析</div></div><input type="file" id="fIn" accept="image/*" onchange="scF(this)" style="display:none"><div id="oPv" style="display:none"></div><div id="oRs" style="display:none"></div><div id="oDn" style="display:none"></div></div><div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:12px">💡 デモ用サンプル</div><div style="font-size:12px;color:#6b7280;margin-bottom:12px">お手元にレシートがない場合</div><div style="display:flex;gap:8px;flex-wrap:wrap">${RCP.map((r,i)=>`<button onclick="cR=${i};dFS()" style="padding:10px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:12px;color:#374151"><b>${r.store}</b><br>¥${r.total.toLocaleString()}</button>`).join('')}</div></div>`}
+function scF(input){const f=input.files[0];if(!f)return;const reader=new FileReader();reader.onload=function(e){const du=e.target.result;document.getElementById('oPv').style.display='block';document.getElementById('oPv').innerHTML=`<div style="margin:16px 0"><img src="${du}" style="max-width:100%;max-height:250px;border-radius:8px;border:2px solid #c7d2fe"></div>`;document.getElementById('ocrZ').style.borderColor='#6366f1';document.getElementById('ocrZ').innerHTML='<div style="font-size:48px;margin-bottom:12px;animation:pulse 1s infinite">🔍</div><div style="font-size:14px;font-weight:600;color:#6366f1">Claude Vision AIが解析中...</div>';pOCR(du)};reader.readAsDataURL(f)}
+async function pOCR(img){document.getElementById('oRs').style.display='block';document.getElementById('oRs').innerHTML='<div style="text-align:center;padding:20px;color:#6366f1"><div style="animation:pulse 1s infinite;font-size:32px;margin-bottom:8px">🤖</div>AIが解析中...</div>';try{const rp=await fetch('/api/ocr',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':authToken},body:JSON.stringify({image:img})});const dt=await rp.json();if(dt.success&&dt.data){const r=dt.data;document.getElementById('ocrZ').style.borderColor='#10b981';document.getElementById('ocrZ').innerHTML='<div style="font-size:48px;margin-bottom:12px">✅</div><div style="font-size:14px;font-weight:600;color:#059669">AI読取完了</div>';const rows=[{l:'店舗名',v:r.store||'不明'},{l:'日付',v:r.date||'不明'}].concat((r.items||[]).map(it=>({l:it.name,v:'¥'+(it.price||0).toLocaleString()}))).concat([{l:'税込合計',v:'<b style="color:#6366f1;font-size:16px">¥'+(r.total||0).toLocaleString()+'</b>'},{l:'勘定科目（AI）',v:'<span style="color:#7c3aed">'+(r.category||'不明')+'</span>'}]);document.getElementById('oRs').innerHTML='<div style="margin:16px 0 8px;font-size:13px;font-weight:600">🤖 AI読取結果</div><div style="background:#fff;border:1px solid #eee;border-radius:10px;overflow:hidden">'+rows.map(x=>'<div style="display:flex;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f3f4f6;font-size:13px"><span style="color:#6b7280">'+x.l+'</span><span style="font-weight:600">'+x.v+'</span></div>').join('')+'</div><div style="text-align:center"><button onclick="regR('+(r.total||0)+',\''+(r.category||'経費')+'\')" class="btn bp" style="margin-top:16px">✅ 経費として登録</button></div>';addMsg(1,'📷 AI読取完了！ '+(r.store||'不明')+' ¥'+(r.total||0).toLocaleString())}else{document.getElementById('oRs').innerHTML='<div style="padding:16px;text-align:center;color:#f97316">⚠️ 読取失敗</div>'}}catch(e){document.getElementById('oRs').innerHTML='<div style="padding:16px;text-align:center;color:#ef4444">エラー: '+e.message+'</div>'}}
+function regR(a,c){oD=true;oA+=a;document.getElementById('oRs').style.display='none';document.getElementById('oPv').style.display='none';document.getElementById('oDn').style.display='block';document.getElementById('oDn').innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;color:#059669;font-weight:600;margin-top:16px">✅ ¥${a.toLocaleString()} を ${c} として登録</div><div style="text-align:center;margin-top:16px"><button onclick="gP('home')" class="btn bg">📊 ダッシュボードで確認 →</button></div>`;addMsg(1,'✅ 登録完了！')}
+function dFS(){const rc=RCP[cR%RCP.length];document.getElementById('ocrZ').style.borderColor='#6366f1';document.getElementById('ocrZ').innerHTML='<div style="font-size:48px;margin-bottom:12px;animation:pulse 1s infinite">🔍</div><div style="font-size:14px;font-weight:600;color:#6366f1">AI解析中...</div>';setTimeout(()=>{document.getElementById('ocrZ').style.borderColor='#10b981';document.getElementById('ocrZ').innerHTML='<div style="font-size:48px;margin-bottom:12px">✅</div><div style="font-size:14px;font-weight:600;color:#059669">読取完了</div>';document.getElementById('oRs').style.display='block';document.getElementById('oRs').innerHTML=`<div style="margin:16px 0 8px;font-size:13px;font-weight:600">🤖 AI読取結果</div><div style="background:#fff;border:1px solid #eee;border-radius:10px;overflow:hidden">${[{l:'店舗名',v:rc.store},{l:'日付',v:rc.date},...rc.items.map(it=>({l:it.n,v:'¥'+it.p.toLocaleString()})),{l:'税込合計',v:'<b style="color:#6366f1">¥'+rc.total.toLocaleString()+'</b>'},{l:'勘定科目',v:'<span style="color:#7c3aed">'+rc.cat+'</span>'}].map(r=>`<div style="display:flex;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f3f4f6;font-size:13px"><span style="color:#6b7280">${r.l}</span><span style="font-weight:600">${r.v}</span></div>`).join('')}</div><div style="text-align:center"><button onclick="regF()" class="btn bp" style="margin-top:16px">✅ 経費として登録</button></div>`;addMsg(1,'📷 読取完了: '+rc.store)},2000)}
+function regF(){const rc=RCP[cR%RCP.length];oD=true;oA+=rc.total;document.getElementById('oRs').style.display='none';document.getElementById('oDn').style.display='block';document.getElementById('oDn').innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;text-align:center;color:#059669;font-weight:600;margin-top:16px">✅ ¥${rc.total.toLocaleString()} を ${rc.cat} として登録</div><div style="text-align:center;margin-top:16px"><button onclick="gP('home')" class="btn bg">📊 ダッシュボードで確認 →</button></div>`;addMsg(1,'✅ 登録完了！');cR++}
+// QUOTE
+function rQuote(){document.getElementById('mCt').innerHTML=`<div style="font-size:18px;font-weight:700;margin-bottom:16px">見積書</div><div style="display:flex;gap:12px;margin-bottom:20px"><button onclick="shQF()" class="btn bp" style="flex:1;padding:16px">📝 手動で作成</button><button onclick="shQA()" class="btn" style="flex:1;padding:16px;background:#7c3aed;color:#fff">🤖 AIに依頼</button></div><div id="qA"></div>${quotes.length?`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:12px">作成済み（${quotes.length}件）</div>${quotes.map((q,i)=>`<div style="padding:12px;border:1px solid #eee;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:600">${q.co}</div><div style="font-size:11px;color:#9ca3af">¥${fmt(q.total+q.tax)} · ${q.no}</div></div><div><button onclick="dlPDF(${i})" class="btn bp" style="padding:6px 12px;font-size:11px">📥 PDF</button></div></div>`).join('')}</div>`:''}`}
+function shQF(){document.getElementById('qA').innerHTML=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:16px">📝 見積書作成</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="fg"><label class="fl">宛先</label><input class="fi" id="qTo" value="株式会社サンプル"></div><div class="fg"><label class="fl">担当者</label><input class="fi" id="qPs" value="山田太郎"></div><div class="fg"><label class="fl">件名</label><input class="fi" id="qSb" value="システム開発"></div><div class="fg"><label class="fl">有効期限</label><input class="fi" id="qEx" value="2026/05/15"></div></div><div id="qIs"><div style="display:flex;gap:8px;margin-bottom:8px" class="qr"><input class="fi" placeholder="品目" value="システム設計・開発" style="flex:3"><input class="fi" placeholder="数量" value="1" type="number" style="flex:1"><input class="fi" placeholder="単価" value="3000000" type="number" style="flex:2"></div></div><button onclick="aQR()" class="btn bs" style="font-size:12px;margin-bottom:16px">+ 行追加</button><div style="text-align:right"><button onclick="crtQ()" class="btn bp">作成</button></div></div>`}
+function aQR(){document.getElementById('qIs').innerHTML+=`<div style="display:flex;gap:8px;margin-bottom:8px" class="qr"><input class="fi" placeholder="品目" style="flex:3"><input class="fi" placeholder="数量" value="1" type="number" style="flex:1"><input class="fi" placeholder="単価" type="number" style="flex:2"></div>`}
+function crtQ(){const rows=document.querySelectorAll('#qIs .qr'),items=[];rows.forEach(r=>{const ins=r.querySelectorAll('input');if(ins[0].value&&ins[2].value)items.push({n:ins[0].value,q:parseInt(ins[1].value)||1,p:parseInt(ins[2].value)||0})});const total=items.reduce((s,it)=>s+it.q*it.p,0);quotes.push({co:document.getElementById('qTo').value,ps:document.getElementById('qPs').value,total,tax:Math.round(total*.1),no:'QT-'+String(quotes.length+1).padStart(4,'0'),items});rQuote();addMsg(1,'📝 見積作成完了！')}
+function shQA(){document.getElementById('qA').innerHTML=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:16px">🤖 AI見積作成</div><div class="fg"><label class="fl">AIへの指示</label><textarea class="fi" id="aiQ" rows="3" style="resize:vertical">A社向けのクラウド導入見積を作って</textarea></div><button onclick="aiGQ()" class="btn" style="background:#7c3aed;color:#fff;width:100%">🤖 生成</button><div id="aiQR"></div></div>`}
+function aiGQ(){document.getElementById('aiQR').innerHTML='<div style="text-align:center;padding:20px;color:#7c3aed;animation:pulse 1s infinite">🤖 生成中...</div>';setTimeout(()=>{quotes.push({co:"A社（株式会社アルファ）",ps:"田中太郎",total:3400000,tax:340000,no:'QT-'+String(quotes.length+1).padStart(4,'0'),items:[{n:"クラウド環境構築",q:1,p:2000000},{n:"データ移行",q:1,p:800000},{n:"運用保守3ヶ月",q:3,p:200000}]});rQuote();addMsg(1,'🤖 AI見積生成完了！')},2500)}
+function dlPDF(i){const q=quotes[i];try{const{jsPDF}=window.jspdf;if(!jsPDF){addMsg(1,'PDF生成にはjsPDFが必要です');return}const doc=new jsPDF(),tot=q.total+q.tax;doc.setFontSize(20);doc.text("見積書",105,25,{align:"center"});doc.setFontSize(12);doc.text(q.co+" 御中",20,45);doc.text(q.no,190,45,{align:"right"});doc.text("合計: ¥"+tot.toLocaleString(),105,60,{align:"center"});let y=75;q.items.forEach(it=>{doc.setFontSize(10);doc.text(it.n,20,y);doc.text("¥"+(it.q*it.p).toLocaleString(),190,y,{align:"right"});y+=8});doc.save("見積_"+q.no+".pdf");addMsg(1,'📥 PDF出力: '+q.no)}catch(e){addMsg(1,'PDF: '+e.message)}}
+function rAIPage(){
+  var d=calc(cm);var expDemo=[
+    {dt:'2026/04/05',cat:'交通費',item:'タクシー（A社訪問）',amt:3200,by:'田中太郎'},
+    {dt:'2026/04/08',cat:'会議費',item:'クライアント昼食会',amt:5400,by:'佐藤花子'},
+    {dt:'2026/04/10',cat:'消耗品費',item:'プリンター用紙・トナー',amt:8900,by:'高橋次郎'},
+    {dt:'2026/04/12',cat:'通信費',item:'AWS利用料（4月分）',amt:48000,by:'鈴木一郎'},
+    {dt:'2026/04/15',cat:'交通費',item:'新幹線（D社出張）',amt:27800,by:'佐藤花子'},
+    {dt:'2026/04/18',cat:'接待交際費',item:'B社との懇親会',amt:32000,by:'田中太郎'},
+    {dt:'2026/04/20',cat:'研修費',item:'AI研修セミナー参加',amt:15000,by:'高橋次郎'}
+  ];
+  var totalExp=expDemo.reduce(function(s,e){return s+e.amt},0);
+  var catSum={};expDemo.forEach(function(e){catSum[e.cat]=(catSum[e.cat]||0)+e.amt});
+  var h='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">';
+  h+='<div style="background:linear-gradient(135deg,#6366f1,#7c3aed);border-radius:12px;padding:16px;color:#fff;text-align:center"><div style="font-size:10px;opacity:.8">今月の経費合計</div><div style="font-size:22px;font-weight:800;margin:4px 0">'+fF(totalExp)+'</div><div style="font-size:10px;opacity:.7">'+expDemo.length+'件</div></div>';
+  h+='<div style="background:linear-gradient(135deg,#059669,#10b981);border-radius:12px;padding:16px;color:#fff;text-align:center"><div style="font-size:10px;opacity:.8">承認済み</div><div style="font-size:22px;font-weight:800;margin:4px 0">'+fF(Math.round(totalExp*0.7))+'</div><div style="font-size:10px;opacity:.7">'+Math.round(expDemo.length*0.7)+'件</div></div>';
+  h+='<div style="background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:12px;padding:16px;color:#fff;text-align:center"><div style="font-size:10px;opacity:.8">未承認</div><div style="font-size:22px;font-weight:800;margin:4px 0">'+fF(Math.round(totalExp*0.3))+'</div><div style="font-size:10px;opacity:.7">'+Math.ceil(expDemo.length*0.3)+'件</div></div>';
+  h+='</div>';
+  h+='<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px">🤖 AIクイックアクション</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  var acts=[
+    {icon:'📷',t:'レシート読取',d:'写真からAI自動入力',act:"gP('ocr')"},
+    {icon:'📊',t:'経費分析',d:'カテゴリ別の傾向分析',act:"askAI('今月の経費をカテゴリ別に分析して')"},
+    {icon:'💡',t:'節税提案',d:'AIが節税ポイントを提案',act:"askAI('中小企業の節税対策を具体的に教えて')"},
+    {icon:'📋',t:'仕訳チェック',d:'AIが仕訳ミスを検出',act:"askAI('今月の経費仕訳で注意すべき点を教えて')"},
+    {icon:'🧾',t:'領収書整理',d:'電帳法に準拠した管理',act:"askAI('電子帳簿保存法の対応で必要なことは？')"},
+    {icon:'📈',t:'予算vs実績',d:'経費予算の達成状況',act:"askAI('固定費月280万に対して今月の経費状況を分析して')"}
+  ];
+  acts.forEach(function(a){h+='<button onclick="'+a.act+'" style="display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #f3f4f6;border-radius:10px;background:#fff;cursor:pointer;text-align:left;transition:all .2s" onmouseover="this.style.borderColor=\'#6366f1\';this.style.background=\'#f5f3ff\'" onmouseout="this.style.borderColor=\'#f3f4f6\';this.style.background=\'#fff\'"><span style="font-size:24px">'+a.icon+'</span><div><div style="font-size:12px;font-weight:700;color:#1a1a2e">'+a.t+'</div><div style="font-size:10px;color:#9ca3af">'+a.d+'</div></div></button>'});
+  h+='</div></div>';
+  h+='<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-size:14px;font-weight:700">📄 最近の経費（'+MO[cm]+'）</div><div style="font-size:11px;color:#6366f1;cursor:pointer" onclick="askAI(\'今月の経費一覧を分析して\')">AIに分析依頼 →</div></div>';
+  h+='<table class="tbl"><thead><tr><th>日付</th><th>勘定科目</th><th>内容</th><th class="ar">金額</th><th>申請者</th></tr></thead><tbody>';
+  expDemo.forEach(function(e){h+='<tr style="cursor:pointer" onclick="askAI(\''+e.item+'の仕訳は正しい？\')"><td style="font-size:11px;color:#6b7280">'+e.dt+'</td><td><span class="badge" style="background:#f3f4f6;color:#374151">'+e.cat+'</span></td><td style="font-size:12px">'+e.item+'</td><td class="ar" style="font-weight:600">'+fF(e.amt)+'</td><td style="font-size:11px;color:#6b7280">'+e.by+'</td></tr>'});
+  h+='</tbody></table></div>';
+  h+='<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:12px">📊 カテゴリ別内訳</div><div style="display:flex;flex-wrap:wrap;gap:8px">';
+  var catColors={'交通費':'#3b82f6','会議費':'#10b981','消耗品費':'#f59e0b','通信費':'#8b5cf6','接待交際費':'#ef4444','研修費':'#06b6d4'};
+  Object.keys(catSum).forEach(function(k){h+='<div style="flex:1;min-width:120px;padding:10px;background:#f9fafb;border-radius:8px;text-align:center"><div style="font-size:10px;color:#6b7280">'+k+'</div><div style="font-size:14px;font-weight:700;color:'+(catColors[k]||'#374151')+';margin-top:2px">'+fF(catSum[k])+'</div><div style="font-size:9px;color:#9ca3af">'+Math.round(catSum[k]/totalExp*100)+'%</div></div>'});
+  h+='</div></div>';
+  document.getElementById('mCt').innerHTML=h;
+}
+
+{cat:'AI・DX',icon:'🤖',items:[
+{t:'生成AI市場が急拡大',s:'2026年国内市場規模1.2兆円突破見込み。企業導入率45%に到達。',tag:'注目',tc:'#7c3aed'},
+{t:'AI Agent活用が本格化',s:'自律型AIが業務プロセスを自動化。人件費30%削減の事例が続出。',tag:'急上昇',tc:'#ef4444'},
+{t:'RAG技術で社内DX加速',s:'社内文書×AIで知識検索が革命的に。導入企業の生産性25%向上。',tag:'トレンド',tc:'#3b82f6'},
+{t:'ノーコードAI開発ツール',s:'プログラミング不要でAIアプリ構築。中小企業のAI導入障壁が低下。',tag:'新着',tc:'#059669'}]},
+{cat:'会計・経営',icon:'📊',items:[
+{t:'インボイス制度対応の自動化',s:'AI-OCRで請求書処理を95%自動化。経理工数が月40時間削減。',tag:'必須',tc:'#d97706'},
+{t:'リアルタイム経営ダッシュボード',s:'月次決算から日次経営へ。KATANAのような3視点分析が標準に。',tag:'注目',tc:'#7c3aed'},
+{t:'キャッシュフロー予測AI',s:'入金予測精度90%超。資金繰り不安を解消する中小企業が増加。',tag:'トレンド',tc:'#3b82f6'}]},
+{cat:'補助金・制度',icon:'💰',items:[
+{t:'IT導入補助金2026',s:'AI・クラウド導入に最大450万円。申請締切は6月30日。',tag:'締切注意',tc:'#ef4444'},
+{t:'事業再構築補助金',s:'DX投資に最大1億円。従業員50名以下の中小企業が対象拡大。',tag:'新着',tc:'#059669'},
+{t:'電子帳簿保存法の完全義務化',s:'2026年1月より全事業者対象。KATANA対応済みで安心。',tag:'必須',tc:'#d97706'}]}
+];
+function rTrend(){
+  var h='<div style="margin-bottom:16px"><div style="display:flex;gap:8px;align-items:center"><input id="tSrc" class="fi" placeholder="例：AI導入 補助金 経費削減..." style="flex:1;font-size:14px"><button onclick="tSearch()" class="btn bp" style="padding:10px 20px">🔍 AI検索</button></div></div><div id="tRes"></div>';
+  h+=TRENDS.map(function(g){return '<div class="card" style="margin-bottom:12px"><div style="font-size:15px;font-weight:700;margin-bottom:12px">'+g.icon+' '+g.cat+'</div>'+g.items.map(function(it){return '<div style="padding:12px;border:1px solid #f3f4f6;border-radius:10px;margin-bottom:8px;cursor:pointer" onclick="askAI(\''+it.t+'について詳しく教えて\')"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:13px;font-weight:700;color:#1a1a2e">'+it.t+'</span><span class="badge" style="background:'+it.tc+'18;color:'+it.tc+'">'+it.tag+'</span></div><div style="font-size:11px;color:#6b7280;line-height:1.6">'+it.s+'</div></div>'}).join('')+'</div>'}).join('');
+  document.getElementById('mCt').innerHTML=h;
+}
+async function tSearch(){
+  var q=document.getElementById('tSrc').value.trim();if(!q)return;
+  document.getElementById('tRes').innerHTML='<div style="text-align:center;padding:20px;color:#6b7280"><div class="dots" style="display:inline-flex"><span></span><span></span><span></span></div><div style="margin-top:8px;font-size:12px">AI分析中...</div></div>';
+  try{
+    var rp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':authToken},body:JSON.stringify({message:'以下のキーワードについて、中小企業の経営者向けに最新トレンドと具体的なアクションを3つ提案してください。短く具体的に。\nキーワード: '+q,history:[]})});
+    var dt=await rp.json();
+    if(dt.reply){document.getElementById('tRes').innerHTML='<div class="card" style="margin-bottom:16px;border-left:3px solid #6366f1"><div style="font-size:12px;font-weight:700;color:#6366f1;margin-bottom:8px">🤖 KATANA AI分析結果: 「'+q+'」</div><div style="font-size:12px;color:#374151;line-height:1.8;white-space:pre-wrap">'+dt.reply+'</div></div>'}
+    else document.getElementById('tRes').innerHTML='<div class="card" style="color:#ef4444">検索エラー</div>'
+  }catch(e){document.getElementById('tRes').innerHTML='<div class="card" style="color:#ef4444">'+e.message+'</div>'}
+}
+function rCS(){document.getElementById('mCt').innerHTML=`<div style="text-align:center;padding:80px"><div style="font-size:64px;margin-bottom:20px">🚧</div><div style="font-size:20px;font-weight:700;margin-bottom:8px">${document.getElementById('pgT').textContent}</div><div style="font-size:14px;color:#9ca3af;margin-bottom:24px">開発中</div><button onclick="gP('home')" class="btn bp">← ホームに戻る</button></div>`}
+// CHAT
+function addMsg(isAI,text,actions,silent){msgs.push({ai:!!isAI,text,actions});if(!silent)rChat()}
+function rChat(){const el=document.getElementById('chMs');if(!el)return;let h=msgs.map(m=>{if(!m.ai)return`<div class="cm u"><div class="cb u">${m.text}</div></div>`;let s=`<div class="cm a"><div class="cb a">${m.text}</div>`;if(m.actions)s+=`<div class="ca">${m.actions.map(a=>`<button class="cab" onclick="${a.act||`askAI('${a.label}')`}"><span style="font-size:18px">${a.icon}</span><div><div style="font-weight:600;color:#1a1a2e">${a.label}</div><div style="font-size:10px;color:#9ca3af">${a.desc||''}</div></div></button>`).join('')}</div>`;return s+'</div>'}).join('');if(typi)h+=`<div class="cm a"><div class="dots"><span></span><span></span><span></span></div></div>`;el.innerHTML=h;el.scrollTop=el.scrollHeight}
+// Command detection - AI chat controls the UI
+function detectCmd(q){
+  try{
+  // Navigate
+  if(q.indexOf('レシート')>=0||q.indexOf('スキャン')>=0){gP('ocr');return '📷 レシートスキャン画面を開きました'}
+  if(q.indexOf('見積')>=0&&(q.indexOf('作')>=0||q.indexOf('開')>=0)){gP('quote');return '📝 見積書画面を開きました'}
+  if(q.indexOf('ホーム')>=0||q.indexOf('ダッシュボード')>=0||q.indexOf('戻')>=0){dashTab='overview';pg='home';rSB();rDash();return '🏠 ダッシュボードに戻りました'}
+  if(q.indexOf('案件別')>=0||q.indexOf('案件一覧')>=0){dashTab='projects';pg='home';rSB();rDash();return '📋 案件別利益テーブルを表示しました'}
+  if(q.indexOf('社員別')>=0||q.indexOf('一人当たり')>=0){dashTab='staff';pg='home';rSB();rDash();return '👥 社員別時間利益テーブルを表示しました'}
+  if(q.indexOf('収益')>=0&&q.indexOf('サマリ')>=0){dashTab='overview';pg='home';rSB();rDash();return '📊 収益サマリを表示しました'}
+  // Month change (only if no other keywords)
+  if(q.indexOf('案件')< 0&&q.indexOf('利益')<0&&q.indexOf('社員')<0&&q.indexOf('儲')<0){
+    var moNum=q.match(/(\d+)月/);
+    if(moNum){var mi=MO.indexOf(parseInt(moNum[1])+'月');if(mi>=0){cm=mi;pg='home';rSB();rDash();var dd=calc(cm);return '📅 '+MO[cm]+'に切り替えました\n🔮 未来: '+fF(dd.future.profit)+'\n📊 今: '+fF(dd.now.profit)+'\n💰 CF: '+fF(dd.cash.profit)}}
+  }
+  // Add project
+  if(q.indexOf('案件')>=0&&(q.indexOf('登録')>=0||q.indexOf('追加')>=0||q.indexOf('作成')>=0)){
+    var pjName='新規案件';
+    var i1=q.indexOf('\u300c');var i2=q.indexOf('\u300d');
+    if(i1>=0&&i2>i1)pjName=q.substring(i1+1,i2);
+    var amt=5000000;
+    var am=q.match(/(\d+)万/);
+    if(am)amt=parseInt(am[1])*10000;
+    var coName=String.fromCharCode(65+CL.length)+'社';
+    var cm2=q.match(/([A-Za-z\uff21-\uff3a\uff41-\uff5a]+)社/);
+    if(cm2)coName=cm2[0];
+    CL.push({id:String.fromCharCode(65+CL.length),nm:coName,fl:coName,pj:pjName,amt:amt,cst:Math.round(amt*0.4),cm:cm,im:Math.min(11,cm+2),pm:Math.min(11,cm+4),ct:'担当未定',staff:[{name:'田中',hrs:Math.round(amt/30000),rate:3000}],progress:0,inv:[]});
+    dashTab='projects';pg='home';rSB();rDash();
+    var nd=calc(cm);
+    return '✅ 案件登録完了！\n📋 案件名: '+pjName+'\n🏢 取引先: '+coName+'\n💰 受注額: '+fF(amt)+'\n\nダッシュボードに反映済み（'+CL.length+'社）\n🔮 未来: '+fF(nd.future.profit)
+  }
+  // Add staff
+  if((q.indexOf('社員')>=0||q.indexOf('スタッフ')>=0)&&(q.indexOf('登録')>=0||q.indexOf('追加')>=0)){
+    var sName='新人太郎';
+    var s1=q.indexOf('\u300c');var s2=q.indexOf('\u300d');
+    if(s1>=0&&s2>s1)sName=q.substring(s1+1,s2);
+    var newSid='S'+String(STAFF.length+1).padStart(3,'0');
+    STAFF.push({id:newSid,name:sName.substring(0,2),full:sName,role:'エンジニア',rate:2500,salary:350000});
+    return '✅ 社員登録完了！\n🆔 採番: '+newSid+'\n👤 氏名: '+sName
+  }
+  // Invoice
+  if(q.indexOf('請求')>=0&&(q.indexOf('出')>=0||q.indexOf('発行')>=0)){
+    for(var ci=0;ci<CL.length;ci++){if(q.indexOf(CL[ci].nm)>=0){CL[ci].im=Math.min(CL[ci].im,cm);pg='home';rSB();rDash();return '✅ '+CL[ci].nm+'に請求書を発行しました'}}
+  }
+  // Payment
+  if(q.indexOf('入金')>=0){
+    for(var ci=0;ci<CL.length;ci++){if(q.indexOf(CL[ci].nm)>=0){CL[ci].pm=Math.min(CL[ci].pm,cm);pg='home';rSB();rDash();return '✅ '+CL[ci].nm+'の入金を確認しました'}}
+  }
+  }catch(e){return '⚠️ コマンドエラー: '+e.message}
+  return null;
+}
+async function askAI(q){msgs.push({ai:0,text:q});hist.push({role:"user",content:q});
+  typi=true;rChat();
+  const d=calc(cm);
+  const gap=d.future.profit-d.cash.profit;
+  const ach=Math.round(d.future.rev/TGT*100);
+  const projInfo=CL.filter(c=>cm>=c.cm).map(c=>{const st=gSt(c,cm),lab=c.staff.reduce((s,sf)=>s+sf.hrs*sf.rate,0),gr=c.amt-lab-c.cst;return c.nm+'('+c.pj+'/売上'+fF(c.amt)+'/粗利'+fF(gr)+'/'+gSL(st)+'/担当:'+c.staff.map(s=>s.name+s.hrs+'h').join('+')+')'}).join(', ');
+  const staffInfo=STAFF.map(s=>{let hrs=0,pjs=[];CL.forEach(c=>{if(cm<c.cm)return;c.staff.forEach(sf=>{if(sf.name===s.name){hrs+=sf.hrs;pjs.push(c.nm)}})});return hrs>0?s.full+'('+s.id+'): '+hrs+'h, '+pjs.join('/')+', 時給¥'+s.rate:null}).filter(Boolean).join('; ');
+  const ctx='\n[現在月:'+MO[cm]+' 未来利益:'+fF(d.future.profit)+' 今利益:'+fF(d.now.profit)+' CF利益:'+fF(d.cash.profit)+' 差額(運転資金):'+fF(gap)+' 契約'+d.future.cnt+'社 目標達成'+ach+'%]\n[案件: '+projInfo+']\n[社員: '+staffInfo+']\n[回答は短く具体的な数字で。箇条書きより文章で。来場者が感動する回答を]';
+  try{
+    const rp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':authToken},body:JSON.stringify({message:q+ctx,history:hist.slice(-8)})});
+    const dt=await rp.json();typi=false;
+    if(dt.reply){hist.push({role:"assistant",content:dt.reply});addMsg(1,dt.reply)}
+    else addMsg(1,'⚠️ '+(dt.error||'エラー'))
+  }catch(e){typi=false;addMsg(1,'⚠️ '+e.message)}
+}
+function sendChat(){
+  var inp=document.getElementById('chIn'),q=inp.value.trim();
+  if(!q||typi)return;
+  inp.value='';updSn();
+  if(cTab==='rag'){doRag(q);return}
+  // INLINE command processing
+  var handled=false;
+  if(q.indexOf('\u6848\u4EF6')>=0 && (q.indexOf('\u767B\u9332')>=0||q.indexOf('\u8FFD\u52A0')>=0||q.indexOf('\u4F5C\u6210')>=0)){
+    var pj='新規案件',am=5000000,co=String.fromCharCode(65+CL.length)+'\u793E';
+    var b1=q.indexOf('\u300C'),b2=q.indexOf('\u300D');if(b1>=0&&b2>b1)pj=q.substring(b1+1,b2);
+    var mm=q.match(/(\d+)\u4E07/);if(mm)am=parseInt(mm[1])*10000;
+    var cm3=q.match(/([A-Za-z]+)\u793E/);if(cm3)co=cm3[0];
+    CL.push({id:String.fromCharCode(65+CL.length),nm:co,fl:co,pj:pj,amt:am,cst:Math.round(am*0.4),cm:cm,im:Math.min(11,cm+2),pm:Math.min(11,cm+4),ct:'\u62C5\u5F53\u672A\u5B9A',staff:[{name:'\u7530\u4E2D',hrs:Math.round(am/30000),rate:3000}],progress:0,inv:[]});
+    dashTab='projects';pg='home';rSB();rDash();
+    var nd=calc(cm);
+    msgs.push({ai:0,text:q});addMsg(1,'\u2705 \u6848\u4EF6\u767B\u9332\u5B8C\u4E86\uFF01\n\u6848\u4EF6\u540D: '+pj+'\n\u53D6\u5F15\u5148: '+co+'\n\u53D7\u6CE8\u984D: '+fF(am)+'\n\n\u30C0\u30C3\u30B7\u30E5\u30DC\u30FC\u30C9\u306B\u53CD\u6620\u6E08\u307F\uFF08'+CL.length+'\u793E\uFF09');
+    handled=true;
+  }
+  else if(q.indexOf('\u6848\u4EF6\u5225')>=0||q.indexOf('\u6848\u4EF6\u4E00\u89A7')>=0){
+    dashTab='projects';pg='home';rSB();rDash();
+    msgs.push({ai:0,text:q});addMsg(1,'\u{1F4CB} \u6848\u4EF6\u5225\u5229\u76CA\u30C6\u30FC\u30D6\u30EB\u3092\u8868\u793A\u3057\u307E\u3057\u305F');
+    handled=true;
+  }
+  else if(q.indexOf('\u793E\u54E1\u5225')>=0||q.indexOf('\u4E00\u4EBA\u5F53\u305F\u308A')>=0){
+    dashTab='staff';pg='home';rSB();rDash();
+    msgs.push({ai:0,text:q});addMsg(1,'\u{1F465} \u793E\u54E1\u5225\u5229\u76CA\u30C6\u30FC\u30D6\u30EB\u3092\u8868\u793A\u3057\u307E\u3057\u305F');
+    handled=true;
+  }
+  else if(q.indexOf('\u30EC\u30B7\u30FC\u30C8')>=0||q.indexOf('\u30B9\u30AD\u30E3\u30F3')>=0){
+    gP('ocr');msgs.push({ai:0,text:q});addMsg(1,'\u{1F4F7} \u30EC\u30B7\u30FC\u30C8\u30B9\u30AD\u30E3\u30F3\u753B\u9762\u3092\u958B\u304D\u307E\u3057\u305F');
+    handled=true;
+  }
+  else if(q.indexOf('\u898B\u7A4D')>=0&&(q.indexOf('\u4F5C')>=0||q.indexOf('\u958B')>=0)){
+    gP('quote');msgs.push({ai:0,text:q});addMsg(1,'\u{1F4DD} \u898B\u7A4D\u66F8\u753B\u9762\u3092\u958B\u304D\u307E\u3057\u305F');
+    handled=true;
+  }
+  else if(q.indexOf('\u30DB\u30FC\u30E0')>=0||q.indexOf('\u30C0\u30C3\u30B7\u30E5')>=0||q.indexOf('\u623B')>=0){
+    dashTab='overview';pg='home';rSB();rDash();
+    msgs.push({ai:0,text:q});addMsg(1,'\u{1F3E0} \u30C0\u30C3\u30B7\u30E5\u30DC\u30FC\u30C9\u306B\u623B\u308A\u307E\u3057\u305F');
+    handled=true;
+  }
+  else if(q.indexOf('\u53CE\u76CA')>=0&&q.indexOf('\u30B5\u30DE\u30EA')>=0){
+    dashTab='overview';pg='home';rSB();rDash();
+    msgs.push({ai:0,text:q});addMsg(1,'\u{1F4CA} \u53CE\u76CA\u30B5\u30DE\u30EA\u3092\u8868\u793A\u3057\u307E\u3057\u305F');
+    handled=true;
+  }
+  else if((q.indexOf('\u793E\u54E1')>=0||q.indexOf('\u30B9\u30BF\u30C3\u30D5')>=0)&&(q.indexOf('\u767B\u9332')>=0||q.indexOf('\u8FFD\u52A0')>=0)){
+    var sNm='\u65B0\u4EBA\u592A\u90CE';
+    var s1=q.indexOf('\u300C'),s2=q.indexOf('\u300D');if(s1>=0&&s2>s1)sNm=q.substring(s1+1,s2);
+    var newSid='S'+String(STAFF.length+1).padStart(3,'0');
+    STAFF.push({id:newSid,name:sNm.substring(0,2),full:sNm,role:'\u30A8\u30F3\u30B8\u30CB\u30A2',rate:2500,salary:350000});
+    var assignPj=CL.filter(function(c){return cm>=c.cm}).sort(function(a,b){return b.amt-a.amt})[0];
+    if(assignPj)assignPj.staff.push({name:sNm.substring(0,2),hrs:40,rate:2500});
+    dashTab='staff';pg='home';rSB();rDash();
+    msgs.push({ai:0,text:q});addMsg(1,'\u2705 \u793E\u54E1\u767B\u9332\u5B8C\u4E86\uFF01\n\u{1F194} \u63A1\u756A: '+newSid+'\n\u{1F464} \u6C0F\u540D: '+sNm+'\n\u{1F4BC} \u5F79\u8077: \u30A8\u30F3\u30B8\u30CB\u30A2\n\u23F0 \u6642\u7D66: \u00A52,500'+(assignPj?'\n\u{1F4CB} \u62C5\u5F53: '+assignPj.nm+'('+assignPj.pj+')':'')+'\n\n\u793E\u54E1\u5225\u5229\u76CA\u30C6\u30FC\u30D6\u30EB\u306B\u53CD\u6620\u6E08\u307F');
+    handled=true;
+  }
+  else if(q.indexOf('\u8ACB\u6C42')>=0&&(q.indexOf('\u51FA')>=0||q.indexOf('\u767A\u884C')>=0)){
+    var found=false;
+    for(var ci=0;ci<CL.length;ci++){if(q.indexOf(CL[ci].nm)>=0){CL[ci].im=Math.min(CL[ci].im,cm);found=true;
+      pg='home';rSB();rDash();
+      msgs.push({ai:0,text:q});addMsg(1,'\u2705 '+CL[ci].nm+'\u306B\u8ACB\u6C42\u66F8\u3092\u767A\u884C\u3057\u307E\u3057\u305F\n\u{1F4B0} \u8ACB\u6C42\u984D: '+fF(CL[ci].amt)+'\n\n\u300C\u4ECA\u306E\u6570\u5B57\u300D\u306B\u53CD\u6620\u6E08\u307F');
+      handled=true;break}}
+    if(!found&&q.indexOf('\u8ACB\u6C42')>=0){
+      msgs.push({ai:0,text:q});addMsg(1,'\u26A0\uFE0F \u53D6\u5F15\u5148\u540D\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\n\u4F8B: \u300CA\u793E\u306B\u8ACB\u6C42\u51FA\u3057\u3066\u300D');
+      handled=true;
+    }
+  }
+  else if(q.indexOf('\u5165\u91D1')>=0){
+    var found2=false;
+    for(var ci=0;ci<CL.length;ci++){if(q.indexOf(CL[ci].nm)>=0){CL[ci].pm=Math.min(CL[ci].pm,cm);found2=true;
+      pg='home';rSB();rDash();
+      msgs.push({ai:0,text:q});addMsg(1,'\u2705 '+CL[ci].nm+'\u304B\u3089\u306E\u5165\u91D1\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F\n\u{1F4B0} \u5165\u91D1\u984D: '+fF(CL[ci].amt)+'\n\n\u30AD\u30E3\u30C3\u30B7\u30E5\u30D5\u30ED\u30FC\u306B\u53CD\u6620\u6E08\u307F');
+      handled=true;break}}
+    if(!found2){
+      msgs.push({ai:0,text:q});addMsg(1,'\u26A0\uFE0F \u53D6\u5F15\u5148\u540D\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\n\u4F8B: \u300CA\u793E\u306E\u5165\u91D1\u78BA\u8A8D\u300D');
+      handled=true;
+    }
+  }
+  if(!handled){
+    var qq=q.replace(/[０-９]/g,function(s){return String.fromCharCode(s.charCodeAt(0)-0xFEE0)});
+    var moM=qq.match(/(\d+)\u6708/);
+    if(moM&&q.indexOf('\u6848\u4EF6')<0&&q.indexOf('\u5229\u76CA')<0&&q.indexOf('\u793E\u54E1')<0&&q.indexOf('\u5104')<0){
+      var mi=MO.indexOf(parseInt(moM[1])+'\u6708');
+      if(mi>=0){cm=mi;pg='home';rSB();rDash();var dd=calc(cm);
+        msgs.push({ai:0,text:q});addMsg(1,'\u{1F4C5} '+MO[cm]+'\u306B\u5207\u308A\u66FF\u3048\u307E\u3057\u305F\n\n\u{1F52E} \u672A\u6765: '+fF(dd.future.profit)+'\n\u{1F4CA} \u4ECA: '+fF(dd.now.profit)+'\n\u{1F4B0} CF: '+fF(dd.cash.profit));
+        handled=true;
+      }
+    }
+  }
+  if(!handled)askAI(q);
+}
+function updSn(){document.getElementById('sBtn').style.background=document.getElementById('chIn').value.trim()?'#6366f1':'#e5e7eb'}
+document.getElementById('chIn').addEventListener('input',updSn);
+document.getElementById('chIn').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
+// RAG
+function setTab(t){cTab=t;document.getElementById('tChat').className='ch-tab'+(t==='chat'?' on':'');document.getElementById('tRag').className='ch-tab'+(t==='rag'?' on':'');document.getElementById('chMs').style.display=t==='chat'?'block':'none';document.getElementById('rP').style.display=t==='rag'?'block':'none';if(t==='rag')rRag();document.getElementById('chIn').placeholder=t==='chat'?'例：「今月儲かってる？」':'社内文書を検索...'}
+function rRag(){document.getElementById('rP').innerHTML=`<div style="font-size:13px;font-weight:600;margin-bottom:12px">📂 社内ドキュメント</div>${RAG.map(r=>`<div class="ri" onclick="shRag('${r.t}')"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;font-weight:600">${r.t}</span><span class="badge" style="background:${r.c}18;color:${r.c}">${r.tg}</span></div><div style="font-size:11px;color:#9ca3af">${r.tx.substring(0,50)}...</div></div>`).join('')}`}
+function doRag(q){const res=RAG.filter(r=>r.t.includes(q)||r.tx.includes(q)||r.tg.includes(q));document.getElementById('rP').innerHTML=res.length?res.map(r=>`<div class="ri" onclick="shRag('${r.t}')"><span style="font-size:12px;font-weight:600">${r.t}</span><div style="font-size:11px;color:#9ca3af">${r.tx}</div></div>`).join(''):`<div style="text-align:center;padding:20px;color:#9ca3af;font-size:12px">「${q}」に一致なし</div>`}
+function shRag(title){const r=RAG.find(x=>x.t===title);if(r){setTab('chat');askAI('社内文書「'+r.t+'」について教えて。内容: '+r.tx)}}
+// INIT
+function initApp(){
+  msgs=[{ai:1,text:"こんにちは！AI経費アシスタントです。\nレシートを添付後「解析開始」などと送信すると処理を開始します。\n\n私は以下の経費精算業務をサポートできます：",actions:[{icon:"📷",label:"レシートスキャン",desc:"OCR自動読み取り・データ化",act:"gP('ocr')"},{icon:"📝",label:"経費申請作成",desc:"自動申請書作成・規定チェック",act:"gP('quote')"},{icon:"✅",label:"承認管理",desc:"申請状況確認",act:"gP('home')"}]}];
+  oS={docs:true};rSB();rDash();rChat();rRag()
+}
+</script>
+</body></html>
