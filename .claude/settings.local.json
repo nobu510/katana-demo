@@ -7,7 +7,8 @@
       "Bash(python:*)",
       "Bash(netstat:*)",
       "Bash(taskkill:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(taskkill //F //PID 13780 2>/dev/null; sleep 2 && cd C:/Users/espac/katana-demo/frontend && rm -rf .next/dev/lock 2>/dev/null && npm run dev)"
     ]
   }
 }
