@@ -1,39 +1,30 @@
 "use client";
 
-import { useApp } from "@/lib/store";
+import { usePathname } from "next/navigation";
 
-const COMPANY_NAMES: Record<string, string> = {
-  it_company: "株式会社J.NOVA",
-  retail: "株式会社マルシェ",
+const PAGE_TITLES: Record<string, [string, string]> = {
+  "/": ["ホーム", "予実管理ダッシュボード"],
+  "/ocr": ["レシートスキャン", "AI OCR 自動読取"],
+  "/quote": ["見積書", "作成・管理"],
+  "/trend": ["AIトレンド検索", "業界動向・競合分析"],
+  "/expense": ["AI精算アシスタント", "経費・仕訳・税務をAIがサポート"],
+  "/chat": ["社内チャット", "メッセージ"],
 };
 
 export default function Header() {
-  const { state, dispatch } = useApp();
-
-  const displayName = state.companyName || COMPANY_NAMES[state.template] || "KATANA AI";
+  const pathname = usePathname();
+  const [title, subtitle] = PAGE_TITLES[pathname] || ["KATANA", ""];
 
   return (
-    <header className="h-14 bg-card border-b border-border flex items-center justify-between px-6 shrink-0">
-      <div className="flex items-center gap-3">
-        <h1 className="text-sm font-semibold text-foreground">
-          {displayName}
-        </h1>
-        <span className="text-xs text-gray-400">📅 2026年度</span>
+    <header className="px-6 py-3 bg-white border-b border-[#e5e7eb] flex justify-between items-center text-[#1a1a2e] shrink-0">
+      <div>
+        <div className="text-base font-bold">{title}</div>
+        <div className="text-[11px] text-[#9ca3af] mt-0.5">{subtitle}</div>
       </div>
-
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5 text-[11px] text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          Claude AI 接続中
-        </div>
-        <button
-          onClick={() => dispatch({ type: "TOGGLE_CHAT" })}
-          className={`w-8 h-8 rounded-lg text-white flex items-center justify-center text-sm transition-colors ${
-            state.chatOpen ? "bg-primary-hover" : "bg-primary hover:bg-primary-hover"
-          }`}
-        >
-          💬
-        </button>
+      <div className="flex items-center gap-4 text-xs text-[#9ca3af]">
+        <span>📅 2026年度</span>
+        <span className="cursor-pointer">🔔</span>
+        <span className="cursor-pointer">⚙️</span>
       </div>
     </header>
   );

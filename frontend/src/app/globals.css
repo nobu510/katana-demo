@@ -17,44 +17,164 @@
   --font-sans: var(--font-noto-sans-jp);
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   background: var(--color-background);
   color: var(--color-foreground);
+  overflow: hidden;
+  height: 100vh;
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #ccc;
+  background: #444;
   border-radius: 3px;
 }
 
 /* Animations */
 @keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 .animate-fade-up {
-  animation: fadeUp 0.4s ease-out;
+  animation: fadeUp 0.4s ease-out both;
 }
 
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
-
 .animate-blink {
   animation: blink 0.8s step-end infinite;
+}
+
+@keyframes pulse-custom {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-custom {
+  animation: pulse-custom 1s infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Progress bar */
+.prog {
+  height: 4px;
+  background: #f3f4f6;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.prog-f {
+  height: 4px;
+  border-radius: 2px;
+  transition: width 0.8s ease-out;
+}
+
+/* Table styles matching HTML */
+.tbl {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.tbl th {
+  background: #f9fafb;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  border-bottom: 1px solid #eee;
+}
+.tbl td {
+  padding: 10px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+}
+.tbl tr:hover td {
+  background: #f9fafb;
+}
+.tbl .ar {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Badge styles */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* Dots typing animation */
+.dots {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  background: #f3f4f6;
+  border-radius: 12px;
+  width: fit-content;
+}
+.dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #aaa;
+  animation: dotPulse 0.8s infinite;
+}
+.dots span:nth-child(2) { animation-delay: 0.15s; }
+.dots span:nth-child(3) { animation-delay: 0.3s; }
+
+/* Card */
+.card {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #eee;
+  padding: 20px;
+  margin-bottom: 16px;
+  animation: fadeUp 0.4s both;
+}
+
+/* Upload zone */
+.uz {
+  border: 2px dashed #c7d2fe;
+  border-radius: 14px;
+  padding: 36px;
+  text-align: center;
+  background: #fafaff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.uz:hover {
+  border-color: #6366f1;
+  background: #f5f3ff;
+}
+
+/* Sidebar wave pattern */
+.sb-wave::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0c0 16.569-13.431 30-30 30C16.569 30 30 16.569 30 0zm0 60c0-16.569 13.431-30 30-30-16.569 0-30 13.431-30 30z' fill='%23fff' fill-rule='evenodd'/%3E%3C/svg%3E");
+  background-size: 30px 30px;
 }

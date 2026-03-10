@@ -3,182 +3,138 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { navigation, type NavItem } from "@/lib/navigation";
-import { useApp } from "@/lib/store";
 
-function NavLink({ item, depth = 0 }: { item: NavItem; depth?: number }) {
-  const pathname = usePathname();
-  const isActive = item.href === pathname;
-  const [expanded, setExpanded] = useState(false);
-  const hasChildren = item.children && item.children.length > 0;
+type MenuItem = {
+  icon: string;
+  label: string;
+  href?: string;
+  children?: MenuItem[];
+};
 
-  if (item.href && !hasChildren) {
-    return (
-      <Link
-        href={item.href}
-        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-colors ${
-          depth > 0 ? "pl-9" : ""
-        } ${
-          isActive
-            ? "bg-primary text-white font-semibold"
-            : "text-gray-300 hover:bg-sidebar-hover hover:text-white"
-        }`}
-      >
-        <span className="text-base w-5 text-center">{item.icon}</span>
-        <span>{item.label}</span>
-      </Link>
-    );
-  }
-
-  // Expandable group
-  return (
-    <div>
-      <button
-        onClick={() => {
-          if (hasChildren) setExpanded(!expanded);
-          else if (item.href) window.location.href = item.href;
-        }}
-        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-gray-300 hover:bg-sidebar-hover hover:text-white transition-colors ${
-          depth > 0 ? "pl-9" : ""
-        }`}
-      >
-        <span className="text-base w-5 text-center">{item.icon}</span>
-        <span className="flex-1 text-left">{item.label}</span>
-        {item.children && (
-          <span
-            className={`text-[10px] text-gray-500 transition-transform ${
-              expanded ? "rotate-90" : ""
-            }`}
-          >
-            ▶
-          </span>
-        )}
-      </button>
-      {expanded && item.children && (
-        <div className="mt-0.5">
-          {item.children.map((child) => (
-            <NavLink key={child.id} item={child} depth={depth + 1} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const TEMPLATES = [
-  { key: "it_company", label: "IT企業", icon: "💻" },
-  { key: "retail", label: "小売業", icon: "🏪" },
+const MENU: MenuItem[] = [
+  { icon: "🏠", label: "ホーム", href: "/" },
+  { icon: "🤖", label: "AI精算アシスタント", href: "/expense" },
+  { icon: "📷", label: "レシートスキャン", href: "/ocr" },
+  { icon: "📈", label: "AIトレンド検索", href: "/trend" },
+  {
+    icon: "📄", label: "書類", children: [
+      { icon: "📋", label: "ファイル確認" },
+      { icon: "📝", label: "見積書", href: "/quote" },
+      { icon: "📄", label: "見積依頼フォーム" },
+      { icon: "📦", label: "発注・納品書" },
+      { icon: "📄", label: "請求書" },
+      { icon: "📑", label: "契約書" },
+      { icon: "🧾", label: "領収書" },
+    ],
+  },
+  { icon: "💳", label: "経費精算" },
+  { icon: "📊", label: "営業管理" },
+  { icon: "📒", label: "会計帳簿" },
+  { icon: "📋", label: "決算" },
+  { icon: "⚙️", label: "会計各種設定" },
+  { icon: "📦", label: "在庫管理" },
+  { icon: "💬", label: "社内チャット", href: "/chat" },
 ];
 
 export default function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
-  const { state, dispatch } = useApp();
+  const pathname = usePathname();
+  const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({ "書類": true });
+
+  const toggleSub = (label: string) => {
+    setOpenSubs((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  const renderItem = (item: MenuItem, depth = 0) => {
+    const isActive = item.href === pathname;
+    const hasChildren = item.children && item.children.length > 0;
+    const isOpen = openSubs[item.label];
+
+    if (hasChildren) {
+      return (
+        <div key={item.label}>
+          <button
+            onClick={() => toggleSub(item.label)}
+            className="w-full flex items-center gap-2.5 py-2.5 px-4 text-[13px] text-[#8888a0] hover:bg-white/5 hover:text-[#c0c0d0] transition-all border-l-[3px] border-transparent"
+          >
+            <span className="w-[18px] text-center text-sm">{item.icon}</span>
+            <span>{item.label}</span>
+            <span className="ml-auto text-[10px] text-[#555]">{isOpen ? "∨" : "›"}</span>
+          </button>
+          <div className={`overflow-hidden transition-all duration-300 ${isOpen ? "max-h-[400px]" : "max-h-0"}`}>
+            {item.children!.map((child) => renderItem(child, depth + 1))}
+          </div>
+        </div>
+      );
+    }
+
+    const content = (
+      <>
+        <span className="w-[18px] text-center text-sm">{item.icon}</span>
+        <span>{item.label}</span>
+      </>
+    );
+
+    const className = `flex items-center gap-2.5 py-2.5 text-[13px] transition-all border-l-[3px] ${
+      depth > 0 ? "pl-11 text-xs" : "px-4"
+    } ${
+      isActive
+        ? "bg-[rgba(99,102,241,0.15)] text-white border-l-[#6366f1]"
+        : "text-[#8888a0] hover:bg-white/5 hover:text-[#c0c0d0] border-transparent"
+    }`;
+
+    if (item.href) {
+      return (
+        <Link key={item.label + item.href} href={item.href} className={className}>
+          {content}
+        </Link>
+      );
+    }
+
+    return (
+      <div key={item.label + (depth > 0 ? "sub" : "")} className={`${className} cursor-pointer`}>
+        {content}
+      </div>
+    );
+  };
 
   return (
-    <aside
-      className={`fixed top-0 left-0 h-screen bg-sidebar flex flex-col z-40 transition-all duration-200 ${
-        collapsed ? "w-16" : "w-56"
-      }`}
-    >
+    <nav className="w-[200px] bg-[#1e1e2e] shrink-0 h-screen flex flex-col relative overflow-hidden sb-wave">
       {/* Logo */}
-      <div className="flex items-center gap-2 px-4 h-14 border-b border-white/10">
-        <span className="text-xl">⚔️</span>
-        {!collapsed && (
-          <span className="text-white font-bold text-sm tracking-wide">
-            KATANA AI
-          </span>
-        )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="ml-auto text-gray-500 hover:text-white text-xs"
-        >
-          {collapsed ? "▶" : "◀"}
-        </button>
+      <div className="px-3.5 py-3.5 flex items-center gap-2.5 border-b border-[#2a2a44] relative z-[1]">
+        <div className="w-[34px] h-[34px] rounded-full bg-white flex items-center justify-center">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+            <path d="M8 4c0 0 2 1 4 1s4-1 4-1v3c0 1-1.5 2-4 2s-4-1-4-2V4z" fill="#4fb5c9" />
+            <rect x="11" y="9" width="2" height="11" rx="1" fill="#4fb5c9" />
+            <path d="M8 20h8" stroke="#4fb5c9" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div className="text-white text-sm font-bold tracking-wider">KATANA AI</div>
       </div>
 
-      {/* Industry Selector */}
-      {!collapsed && (
-        <div className="px-3 pt-3 pb-2 border-b border-white/10">
-          <div className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-wider">業種テンプレート</div>
-          <div className="flex gap-1">
-            {TEMPLATES.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => dispatch({ type: "SET_TEMPLATE", template: t.key })}
-                className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
-                  state.template === t.key
-                    ? "bg-primary text-white"
-                    : "bg-white/10 text-gray-400 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                <span>{t.icon}</span>
-                <span>{t.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {collapsed && (
-        <div className="flex flex-col items-center gap-1 py-2 border-b border-white/10">
-          {TEMPLATES.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => dispatch({ type: "SET_TEMPLATE", template: t.key })}
-              className={`text-lg ${state.template === t.key ? "opacity-100" : "opacity-40"}`}
-              title={t.label}
-            >
-              {t.icon}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-        {collapsed
-          ? navigation.map((item) => (
-              <div key={item.id} className="flex justify-center py-2">
-                {item.href ? (
-                  <Link
-                    href={item.href}
-                    className="text-lg text-gray-400 hover:text-white"
-                    title={item.label}
-                  >
-                    {item.icon}
-                  </Link>
-                ) : (
-                  <span
-                    className="text-lg text-gray-500 cursor-default"
-                    title={item.label}
-                  >
-                    {item.icon}
-                  </span>
-                )}
-              </div>
-            ))
-          : navigation.map((item) => <NavLink key={item.id} item={item} />)}
-      </nav>
+      <div className="flex-1 overflow-y-auto py-2 relative z-[1]">
+        <button
+          onClick={() => window.location.reload()}
+          className="flex items-center gap-2.5 py-2 px-4 text-[#6366f1] text-base cursor-pointer w-full text-left"
+        >
+          ‹
+        </button>
+        {MENU.map((item) => renderItem(item))}
+      </div>
 
-      {/* User section */}
-      {!collapsed && (
-        <div className="border-t border-white/10 p-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">
-              G
-            </div>
-            <div>
-              <div className="text-white text-xs font-medium">GOTO</div>
-              <div className="text-gray-500 text-[10px]">Owner</div>
-            </div>
-          </div>
-          <a
-            href="#"
-            className="block mt-2 text-[10px] text-primary hover:underline"
-          >
-            ↗ 人事労務管理へ
-          </a>
+      {/* Footer */}
+      <div className="border-t border-[#2a2a44] px-4 py-3 relative z-[1]">
+        <div className="text-[#8888a0] text-xs cursor-pointer">↗ 人事労務管理へ</div>
+      </div>
+
+      {/* User */}
+      <div className="px-4 py-3 border-t border-[#2a2a44] flex items-center gap-2.5 relative z-[1]">
+        <div className="w-8 h-8 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-[13px] font-bold">G</div>
+        <div>
+          <div className="text-white text-xs font-semibold">GOTO</div>
+          <div className="text-[#6b7280] text-[10px]">オーナー</div>
         </div>
-      )}
-    </aside>
+      </div>
+    </nav>
   );
 }

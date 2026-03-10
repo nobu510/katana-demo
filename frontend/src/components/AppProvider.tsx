@@ -7,7 +7,7 @@ import { initialClients, initialStaff } from "@/lib/data";
 const initialState: AppState = {
   currentMonth: 0,
   template: "it_company",
-  registered: false,
+  authenticated: false,
   companyName: "",
   clients: [...initialClients],
   staff: [...initialStaff],
@@ -16,8 +16,9 @@ const initialState: AppState = {
   ocrAmount: 0,
   ocrDone: false,
   dashTab: "overview",
-  chatOpen: false,
+  chatOpen: true,
   typing: false,
+  quotes: [],
 };
 
 export default function AppProvider({ children }: { children: React.ReactNode }) {

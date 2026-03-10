@@ -3,16 +3,25 @@
 import { createContext, useContext } from "react";
 import type { Client, Staff } from "./data";
 
+export type Quote = {
+  co: string;
+  ps: string;
+  total: number;
+  tax: number;
+  no: string;
+  items: { n: string; q: number; p: number }[];
+};
+
 export type ChatMessage = {
   ai: boolean;
   text: string;
-  actions?: { icon: string; label: string; desc?: string }[];
+  actions?: { icon: string; label: string; desc?: string; href?: string }[];
 };
 
 export type AppState = {
   currentMonth: number;
   template: string;
-  registered: boolean;
+  authenticated: boolean;
   companyName: string;
   clients: Client[];
   staff: Staff[];
@@ -23,6 +32,7 @@ export type AppState = {
   dashTab: "overview" | "projects" | "staff";
   chatOpen: boolean;
   typing: boolean;
+  quotes: Quote[];
 };
 
 export type AppAction =
@@ -38,8 +48,9 @@ export type AppAction =
   | { type: "UPDATE_CLIENT"; index: number; client: Partial<Client> }
   | { type: "ADD_OCR_AMOUNT"; amount: number }
   | { type: "UPDATE_LAST_MESSAGE"; text: string }
-  | { type: "SET_TEMPLATE"; template: string }
-  | { type: "SET_REGISTERED"; registered: boolean; companyName?: string; template?: string };
+  | { type: "LOGIN"; email: string }
+  | { type: "LOGOUT" }
+  | { type: "ADD_QUOTE"; quote: Quote };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -73,16 +84,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (msgs.length > 0) msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], text: action.text };
       return { ...state, messages: msgs };
     }
-    case "SET_TEMPLATE":
-      return { ...state, template: action.template, currentMonth: 0 };
-    case "SET_REGISTERED":
-      return {
-        ...state,
-        registered: action.registered,
-        companyName: action.companyName || state.companyName,
-        template: action.template || state.template,
-        currentMonth: 0,
-      };
+    case "LOGIN":
+      return { ...state, authenticated: true, companyName: action.email.split("@")[0] };
+    case "LOGOUT":
+      return { ...state, authenticated: false };
+    case "ADD_QUOTE":
+      return { ...state, quotes: [...state.quotes, action.quote] };
     default:
       return state;
   }
