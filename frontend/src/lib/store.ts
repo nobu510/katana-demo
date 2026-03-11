@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { Client, Staff } from "./data";
+import { initialClients, initialStaff } from "./data";
 
 export type Quote = {
   co: string;
@@ -29,6 +30,7 @@ export type AppState = {
   history: { role: string; content: string }[];
   ocrAmount: number;
   ocrDone: boolean;
+  companyRegistered: boolean;
   dashTab: "overview" | "projects" | "staff";
   chatOpen: boolean;
   typing: boolean;
@@ -50,7 +52,8 @@ export type AppAction =
   | { type: "UPDATE_LAST_MESSAGE"; text: string }
   | { type: "LOGIN"; email: string }
   | { type: "LOGOUT" }
-  | { type: "ADD_QUOTE"; quote: Quote };
+  | { type: "ADD_QUOTE"; quote: Quote }
+  | { type: "REGISTER_COMPANY" };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -90,6 +93,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, authenticated: false };
     case "ADD_QUOTE":
       return { ...state, quotes: [...state.quotes, action.quote] };
+    case "REGISTER_COMPANY":
+      if (typeof window !== "undefined") localStorage.setItem("company_registered", "1");
+      return {
+        ...state,
+        companyRegistered: true,
+        clients: state.clients.length === 0 ? [...initialClients] : state.clients,
+        staff: state.staff.length === 0 ? [...initialStaff] : state.staff,
+      };
     default:
       return state;
   }

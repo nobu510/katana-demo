@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useApp } from "@/lib/store";
 
 export default function LoginScreen() {
-  const { dispatch } = useApp();
+  const { state, dispatch } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -14,31 +14,37 @@ export default function LoginScreen() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
-    if (!email.trim() || !password.trim()) {
-      setError("メールアドレスとパスワードを入力してください");
-      return;
-    }
-
     setLoading(true);
 
-    // TODO: Supabase Auth に接続
-    // 仮のログイン処理（1秒待機してダッシュボードへ遷移）
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    // 仮ログイン: 何を入力してもログイン可能
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
-    dispatch({ type: "LOGIN", email });
-    dispatch({
-      type: "ADD_MESSAGE",
-      message: {
-        ai: true,
-        text: `ようこそ、KATANA AIへ。\n経営データの確認、経費精算、AIへの質問など何でもお気軽にどうぞ。`,
-        actions: [
-          { icon: "📊", label: "ダッシュボードを見る", desc: "3視点の経営状況", href: "/" },
-          { icon: "📷", label: "レシートスキャン", desc: "AI OCR自動読取", href: "/ocr" },
-          { icon: "📝", label: "見積書を作成", desc: "手動 or AI生成", href: "/quote" },
-        ],
-      },
-    });
+    dispatch({ type: "LOGIN", email: email || "demo@katana.ai" });
+
+    if (state.companyRegistered) {
+      // 登録済みユーザー: 通常のウェルカムメッセージ
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: {
+          ai: true,
+          text: `ようこそ、KATANA AIへ。\n経営データの確認、経費精算、AIへの質問など何でもお気軽にどうぞ。`,
+          actions: [
+            { icon: "📊", label: "ダッシュボードを見る", desc: "3視点の経営状況", href: "/" },
+            { icon: "📷", label: "レシートスキャン", desc: "AI OCR自動読取", href: "/ocr" },
+            { icon: "📝", label: "見積書を作成", desc: "手動 or AI生成", href: "/quote" },
+          ],
+        },
+      });
+    } else {
+      // 新規ユーザー: オンボーディングメッセージ
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: {
+          ai: true,
+          text: `こんにちは！KATANA AIです。御社の経営を一刀両断します。\nまず、どんなお仕事をされていますか？`,
+        },
+      });
+    }
 
     setLoading(false);
   };
@@ -93,7 +99,7 @@ export default function LoginScreen() {
                 メールアドレス
               </label>
               <input
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"

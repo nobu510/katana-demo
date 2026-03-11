@@ -5,12 +5,18 @@ import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import ChatSidebar from "@/components/ChatSidebar";
 import LoginScreen from "@/components/LoginScreen";
+import OnboardingChat from "@/components/OnboardingChat";
 
 export default function LayoutContent({ children }: { children: React.ReactNode }) {
   const { state } = useApp();
 
   if (!state.authenticated) {
     return <LoginScreen />;
+  }
+
+  // 企業未登録 → 全画面チャット（オンボーディング）
+  if (!state.companyRegistered) {
+    return <OnboardingChat />;
   }
 
   return (
