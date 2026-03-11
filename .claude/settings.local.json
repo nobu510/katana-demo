@@ -22,7 +22,8 @@
       "Bash(ls -la /c/Users/espac/katana-demo/frontend/src/app/*/)",
       "Bash(tasklist 2>/dev/null | grep -i python | head -5)",
       "Bash(cd C:/Users/espac/katana-demo/frontend && npx tsc --noEmit --pretty 2>&1 | head -30)",
-      "Bash(cd C:/Users/espac/katana-demo/frontend && npx tsc --noEmit --pretty 2>&1 | head -40)"
+      "Bash(cd C:/Users/espac/katana-demo/frontend && npx tsc --noEmit --pretty 2>&1 | head -40)",
+      "Bash(git commit:*)"
     ]
   }
 }

@@ -2,7 +2,7 @@
 
 import { useReducer, useEffect, useState } from "react";
 import { AppContext, appReducer, type AppState } from "@/lib/store";
-import { initialClients, initialStaff, DEFAULT_FIXED_COSTS } from "@/lib/data";
+import { type FixedCostBreakdown } from "@/lib/data";
 
 function createInitialState(registered: boolean): AppState {
   return {
@@ -13,7 +13,10 @@ function createInitialState(registered: boolean): AppState {
     companyRegistered: registered,
     industry: "",
     dataInputDone: false,
-    fixedCosts: DEFAULT_FIXED_COSTS,
+    fixedCosts: {
+      personnel: 0, rent: 0, utilities: 0, communication: 0,
+      lease: 0, insurance: 0, depreciation: 0, interest: 0, other: 0,
+    } as FixedCostBreakdown,
     clients: [],
     staff: [],
     messages: [],

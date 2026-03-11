@@ -101,7 +101,7 @@ export default function Sidebar() {
   };
 
   return (
-    <nav className="w-[200px] bg-[#1e1e2e] shrink-0 h-screen flex flex-col relative overflow-hidden sb-wave">
+    <nav className="w-[200px] bg-[#1e1e2e] shrink-0 h-screen flex flex-col relative overflow-hidden">
       {/* Logo */}
       <div className="px-3.5 py-3.5 flex items-center gap-2.5 border-b border-[#2a2a44] relative z-[1]">
         <div className="w-[34px] h-[34px] rounded-full bg-white flex items-center justify-center">

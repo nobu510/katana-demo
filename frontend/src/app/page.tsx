@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/store";
-import { calc, fF, gSt, gSL, MO, TGT, FX, FASSETS, fixedCostTotal, FIXED_COST_LABELS, type FixedCostBreakdown } from "@/lib/data";
+import { calc, fF, fmt, gSt, gSL, MO, TGT, fixedCostTotal, FIXED_COST_LABELS, type FixedCostBreakdown } from "@/lib/data";
 
 export default function DashboardPage() {
   const { state, dispatch } = useApp();
@@ -99,6 +99,18 @@ export default function DashboardPage() {
   const d = calc(state.clients, cm, state.ocrAmount, state.fixedCosts);
   const gap = d.future.profit - d.cash.profit;
   const ach = Math.round((d.future.rev / TGT) * 100);
+  const fcMonthly = fixedCostTotal(state.fixedCosts);
+
+  // 業種に応じた対象単位
+  const industryUnit = (() => {
+    const ind = (state.industry || "").toLowerCase();
+    if (ind.match(/小売|retail|菓子|スーパー|食品/)) return "品目";
+    if (ind.match(/飲食|restaurant|カフェ|レストラン/)) return "品目";
+    if (ind.match(/建設|construction|工事/)) return "件";
+    if (ind.match(/製造|manufacturing/)) return "品目";
+    if (ind.match(/サービス|service/)) return "件";
+    return "社";
+  })();
 
   const views = [
     { key: "future" as const, label: "未来の数字", sub: "契約済＋請求前", icon: "🔮", color: "#7c3aed", revLabel: "契約済売上", data: d.future },
@@ -121,8 +133,6 @@ export default function DashboardPage() {
 
   // Assets
   const recvAmt = state.clients.filter(c => gSt(c, cm) === "iv").reduce((s, c) => s + c.amt, 0);
-  const faTotal = FASSETS.reduce((s, a) => s + a.val - a.dep, 0);
-  const totalAssets = recvAmt + faTotal + d.cash.rev;
 
   // Staff data for staff tab
   const staffData = state.staff.map(s => {
@@ -194,11 +204,11 @@ export default function DashboardPage() {
             <div className="text-[11px] text-[#6b7280] leading-[2.2]">
               {v.revLabel}<span className="float-right" style={{ color: v.color }}>+{fF(v.data.rev)}</span><br/>
               原価<span className="float-right text-[#ef4444]">−{fF(v.data.cost)}</span><br/>
-              固定費(月280万×{v.key === "cash" ? Math.max(1, cm) : cm + 1}月)<span className="float-right text-[#f97316]">−{fF(v.data.fixed)}</span><br/>
+              固定費(月{fmt(fcMonthly)}×{v.key === "cash" ? Math.max(1, cm) : cm + 1}月)<span className="float-right text-[#f97316]">−{fF(v.data.fixed)}</span><br/>
               税金(30%)<span className="float-right text-[#eab308]">−{fF(v.data.tax)}</span>
             </div>
             <div className="mt-2 pt-2 border-t border-[#f3f4f6] text-[10px] text-[#9ca3af]">
-              対象: <b style={{ color: v.color }}>{v.data.cnt}社</b>
+              対象: <b style={{ color: v.color }}>{v.data.cnt}{industryUnit}</b>
               <span className="float-right text-[#6366f1] cursor-pointer">→ AIに聞く</span>
             </div>
           </div>
@@ -223,7 +233,7 @@ export default function DashboardPage() {
       {/* Assets */}
       <div className="card" style={{ marginTop: 12 }}>
         <div className="text-sm font-bold mb-3">💎 資産状況（{MO[cm]}時点）</div>
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-[#f0fdf4] rounded-[10px] p-3 text-center">
             <div className="text-[10px] text-[#6b7280]">💰 現金（入金済）</div>
             <div className="text-base font-extrabold text-[#059669] mt-1">{fF(d.cash.rev)}</div>
@@ -235,29 +245,11 @@ export default function DashboardPage() {
               {state.clients.filter(c => gSt(c, cm) === "iv").map(c => c.nm).join(", ") || "なし"}
             </div>
           </div>
-          <div className="bg-[#eff6ff] rounded-[10px] p-3 text-center">
-            <div className="text-[10px] text-[#6b7280]">🏢 固定資産（簿価）</div>
-            <div className="text-base font-extrabold text-[#2563eb] mt-1">{fF(faTotal)}</div>
-          </div>
         </div>
-        <div className="flex justify-between px-3 py-2 bg-[#f9fafb] rounded-lg mb-3">
+        <div className="flex justify-between px-3 py-2 bg-[#f9fafb] rounded-lg">
           <span className="text-xs font-bold text-[#1a1a2e]">📊 総資産</span>
-          <span className="text-base font-extrabold text-[#1a1a2e]">{fF(totalAssets)}</span>
+          <span className="text-base font-extrabold text-[#1a1a2e]">{fF(d.cash.rev + recvAmt)}</span>
         </div>
-        <div className="text-[11px] text-[#6b7280]"><b>固定資産明細:</b></div>
-        <table className="tbl" style={{ marginTop: 6 }}>
-          <thead><tr><th>資産名</th><th className="ar">取得価額</th><th className="ar">減価償却累計</th><th className="ar">簿価</th></tr></thead>
-          <tbody>
-            {FASSETS.map(a => (
-              <tr key={a.nm}>
-                <td>{a.nm}</td>
-                <td className="ar">{fF(a.val)}</td>
-                <td className="ar" style={{ color: "#ef4444" }}>{fF(a.dep)}</td>
-                <td className="ar" style={{ color: "#2563eb", fontWeight: 600 }}>{fF(a.val - a.dep)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
 
       {/* Tabs */}

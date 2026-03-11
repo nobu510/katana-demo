@@ -82,7 +82,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const existIdx = state.clients.findIndex(c => c.nm === action.client.nm);
       if (existIdx >= 0) {
         const updated = [...state.clients];
-        updated[existIdx] = { ...updated[existIdx], ...action.client };
+        const existing = updated[existIdx];
+        // 既存データがある場合、0やemptyで上書きしない（意図的な更新のみ反映）
+        const merged = { ...existing };
+        for (const [k, v] of Object.entries(action.client)) {
+          if (k === "nm") continue; // キーは変えない
+          if (k === "cst" && typeof v === "number" && v > 0) { merged.cst = v; continue; }
+          if (k === "amt" && typeof v === "number" && v > 0) { merged.amt = v; continue; }
+          if (typeof v === "number" && v > 0) { (merged as Record<string, unknown>)[k] = v; continue; }
+          if (typeof v === "string" && v !== "") { (merged as Record<string, unknown>)[k] = v; continue; }
+          if (Array.isArray(v) && v.length > 0) { (merged as Record<string, unknown>)[k] = v; continue; }
+        }
+        updated[existIdx] = merged;
         return { ...state, clients: updated };
       }
       return { ...state, clients: [...state.clients, action.client] };
