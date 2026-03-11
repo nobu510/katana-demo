@@ -8,7 +8,12 @@
       "Bash(netstat:*)",
       "Bash(taskkill:*)",
       "Bash(npx next:*)",
-      "Bash(taskkill //F //PID 13780 2>/dev/null; sleep 2 && cd C:/Users/espac/katana-demo/frontend && rm -rf .next/dev/lock 2>/dev/null && npm run dev)"
+      "Bash(taskkill //F //PID 13780 2>/dev/null; sleep 2 && cd C:/Users/espac/katana-demo/frontend && rm -rf .next/dev/lock 2>/dev/null && npm run dev)",
+      "Bash(ls backend/requirements*.txt backend/pyproject.toml backend/Pipfile 2>/dev/null; ls *.txt *.toml 2>/dev/null | head -5)",
+      "Bash(pip show:*)",
+      "Bash(pwd && ls frontend/src/components/*.tsx)",
+      "Bash(git add:*)",
+      "Bash(git push:*)"
     ]
   }
 }
