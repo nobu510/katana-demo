@@ -1,12 +1,102 @@
 "use client";
 
 import { useApp } from "@/lib/store";
-import { calc, fF, gSt, gSL, MO, TGT, FX, FASSETS } from "@/lib/data";
+import { calc, fF, gSt, gSL, MO, TGT, FX, FASSETS, fixedCostTotal, FIXED_COST_LABELS, type FixedCostBreakdown } from "@/lib/data";
 
 export default function DashboardPage() {
   const { state, dispatch } = useApp();
+
+  // データ未入力の場合の空状態
+  if (state.clients.length === 0) {
+    const fcTotal = fixedCostTotal(state.fixedCosts);
+    return (
+      <div className="animate-fade-up">
+        {state.companyName && (
+          <div className="text-lg font-bold mb-4">Welcome, {state.companyName}</div>
+        )}
+        <div className="bg-white rounded-xl border border-[#eee] p-8 text-center mb-4">
+          <div className="text-5xl mb-4">📊</div>
+          <div className="text-lg font-bold text-[#1a1a2e] mb-2">売上データがまだありません</div>
+          <p className="text-sm text-[#9ca3af] mb-4 max-w-md mx-auto">
+            右のチャットで売上データを入力すると、3視点（未来・今・CF）で経営状況をリアルタイム分析します。
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => dispatch({ type: "SET_CHAT_OPEN", open: true })}
+              className="px-5 py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] transition-colors"
+            >
+              チャットでデータ入力
+            </button>
+          </div>
+        </div>
+
+        {/* 登録済み情報 */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl border border-[#eee] p-4">
+            <div className="text-[10px] text-[#9ca3af] mb-1">業種</div>
+            <div className="text-sm font-bold text-[#1a1a2e]">{state.industry || "未設定"}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-[#eee] p-4">
+            <div className="text-[10px] text-[#9ca3af] mb-1">月額固定費</div>
+            <div className="text-sm font-bold text-[#1a1a2e]">{fF(fcTotal)}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-[#eee] p-4">
+            <div className="text-[10px] text-[#9ca3af] mb-1">登録データ</div>
+            <div className="text-sm font-bold text-[#9ca3af]">売上 0件 / 社員 0名</div>
+          </div>
+        </div>
+
+        {/* 固定費内訳 */}
+        {fcTotal > 0 && (
+          <div className="bg-white rounded-xl border border-[#eee] p-5 mt-4">
+            <div className="text-sm font-bold text-[#1a1a2e] mb-3">固定費内訳（月額）</div>
+            <div className="grid grid-cols-3 gap-2">
+              {(Object.entries(FIXED_COST_LABELS) as [keyof FixedCostBreakdown, string][]).map(([k, label]) => {
+                const val = state.fixedCosts[k];
+                if (val <= 0) return null;
+                return (
+                  <div key={k} className="flex justify-between text-xs py-1 px-2 bg-[#f9fafb] rounded">
+                    <span className="text-[#6b7280]">{label}</span>
+                    <span className="font-semibold text-[#1a1a2e]">{fF(val)}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between mt-2 pt-2 border-t border-[#f3f4f6] text-xs">
+              <span className="font-bold">合計</span>
+              <span className="font-bold text-[#6366f1]">{fF(fcTotal)}/月</span>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-[#f5f3ff] rounded-xl border border-[#ede9fe] p-4 mt-4">
+          <div className="text-xs text-[#6366f1] font-semibold mb-1">入力例（{state.industry || "業種"}）</div>
+          <div className="text-[11px] text-[#6b7280] space-y-1">
+            {(state.industry || "").match(/小売|retail|菓子|スーパー|食品/) ? (<>
+              <p>「和菓子 300万、洋菓子 200万、ギフト 150万」</p>
+              <p>「和菓子 原価率45%、洋菓子 原価率40%」</p>
+            </>) : (state.industry || "").match(/飲食|restaurant|カフェ/) ? (<>
+              <p>「ランチ 180万、ディナー 320万、テイクアウト 80万」</p>
+              <p>「食材原価率 ランチ35%、ディナー30%」</p>
+            </>) : (state.industry || "").match(/建設|construction|工事/) ? (<>
+              <p>「○○邸新築工事 3000万、△△ビル改修 1500万」</p>
+              <p>「外注費 新築1800万、改修800万」</p>
+            </>) : (state.industry || "").match(/製造|manufacturing/) ? (<>
+              <p>「製品A 500万、製品B 300万」</p>
+              <p>「材料費 製品A 原価率55%」</p>
+            </>) : (<>
+              <p>「A社のシステム開発 500万、B社のDX支援 300万」</p>
+              <p>「原価率 A社40%、B社35%」</p>
+            </>)}
+            <p>「田中太郎、エンジニア、月給45万」</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const cm = state.currentMonth;
-  const d = calc(state.clients, cm, state.ocrAmount);
+  const d = calc(state.clients, cm, state.ocrAmount, state.fixedCosts);
   const gap = d.future.profit - d.cash.profit;
   const ach = Math.round((d.future.rev / TGT) * 100);
 
@@ -57,7 +147,9 @@ export default function DashboardPage() {
 
   return (
     <div className="animate-fade-up">
-      <div className="text-lg font-bold mb-4">Welcome back, GOTO</div>
+      {state.companyName && (
+        <div className="text-lg font-bold mb-4">Welcome back, {state.companyName}</div>
+      )}
 
       {state.ocrDone && (
         <div className="bg-[#f0fdf4] border border-[#bbf7d0] rounded-lg px-3.5 py-2.5 mb-3 text-xs text-[#059669]">
@@ -222,7 +314,7 @@ export default function DashboardPage() {
             <div className="text-sm font-bold mb-3.5">月別利益推移</div>
             <div className="flex items-end gap-1 h-[120px]">
               {MO.map((m, i) => {
-                const dd = calc(state.clients, i, state.ocrAmount);
+                const dd = calc(state.clients, i, state.ocrAmount, state.fixedCosts);
                 const mx = 40000000;
                 return (
                   <div key={m} className="flex-1 flex flex-col items-center gap-1" style={{ opacity: i <= cm ? 1 : 0.15 }}>

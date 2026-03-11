@@ -13,7 +13,16 @@
       "Bash(pip show:*)",
       "Bash(pwd && ls frontend/src/components/*.tsx)",
       "Bash(git add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(tasklist 2>/dev/null | grep -i uvicorn || tasklist 2>/dev/null | grep -i python || echo \"No python/uvicorn running\")",
+      "Bash(tasklist 2>/dev/null | grep -E \"20680|20660|30948|11600|26928|27928\")",
+      "Bash(for pid:*)",
+      "Bash(tasklist 2>/dev/null | grep \"python\" || echo \"No python processes\")",
+      "Bash(tasklist 2>/dev/null | grep -i node | head -10)",
+      "Bash(ls -la /c/Users/espac/katana-demo/frontend/src/app/*/)",
+      "Bash(tasklist 2>/dev/null | grep -i python | head -5)",
+      "Bash(cd C:/Users/espac/katana-demo/frontend && npx tsc --noEmit --pretty 2>&1 | head -30)",
+      "Bash(cd C:/Users/espac/katana-demo/frontend && npx tsc --noEmit --pretty 2>&1 | head -40)"
     ]
   }
 }

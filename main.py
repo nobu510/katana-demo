@@ -6,14 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pathlib import Path
-import httpx, json, os, io, base64, time
+import httpx, json, os, io, base64, time, logging
+
+logger = logging.getLogger("katana")
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -149,6 +152,414 @@ S007中村六郎(Designer/時給2800円/月給40万) S008加藤八郎(Tester/時
 - 曖昧な質問にも3視点で答える
 - KATANAの機能を印象づける
 - 展示会デモなので来場者がすごいと思う回答をする"""
+
+REGISTER_SYSTEM_PROMPT = """あなたはKATANA AIの企業登録アシスタントです。
+ユーザーとの会話から以下の4項目を聞き出してください:
+1. 業種 (industry) - 例: AI開発、製造業、小売業など
+2. 会社名 (name)
+3. 社員数 (staff_count) - 数値
+4. 月額固定費の合計 (fixed_cost_monthly) - 数値(万円単位)
+
+【固定費について】
+- まずは「月の固定費は大体いくらぐらいですか？（家賃、人件費、光熱費など全部含めて）」と合計を聞いてください
+- ユーザーが合計だけ答えた場合はそれでOK。「後からチャットで内訳を詳しく設定できます」と伝えてください
+- ユーザーが「家賃30万、人件費120万...」のように内訳を言った場合は、それも記録してください
+- 固定費の勘定科目: 人件費(personnel)、地代家賃(rent)、水道光熱費(utilities)、通信費(communication)、リース料(lease)、保険料(insurance)、減価償却費(depreciation)、支払利息(interest)、その他(other)
+
+【ルール】
+- 1回のメッセージで全部聞かず、会話の流れで自然に聞いてください
+- ユーザーが情報を提供したら、確認しつつ次の未取得項目を聞いてください
+- 4項目すべて揃ったら確認メッセージを出してください
+- フレンドリーで簡潔に答えてください
+- 絵文字を適度に使ってください
+
+【重要】回答はJSON形式で返してください。JSON以外は出力しないでください。
+{
+  "reply": "ユーザーへの返答メッセージ",
+  "extracted_data": {
+    "industry": "抽出した業種 or null",
+    "name": "抽出した会社名 or null",
+    "staff_count": 抽出した社員数 or null,
+    "fixed_cost_monthly": 抽出した月額固定費合計(万円) or null,
+    "fixed_cost_breakdown": {
+      "personnel": 人件費(万円) or null,
+      "rent": 地代家賃(万円) or null,
+      "utilities": 水道光熱費(万円) or null,
+      "communication": 通信費(万円) or null,
+      "lease": リース料(万円) or null,
+      "insurance": 保険料(万円) or null,
+      "depreciation": 減価償却費(万円) or null,
+      "interest": 支払利息(万円) or null,
+      "other": その他(万円) or null
+    }
+  },
+  "confirmed": false
+}
+
+- extracted_dataには今回のメッセージから新たに抽出できた項目のみ値を入れ、抽出できなかった項目はnullにしてください
+- fixed_cost_breakdownはユーザーが内訳を言及した場合のみ値を入れてください。合計だけの場合はすべてnullでOK
+- 4項目すべて揃い、ユーザーが確認OKした場合のみ confirmed: true にしてください
+"""
+
+@app.post("/api/chat/register")
+async def chat_register(request: Request):
+    if not CLAUDE_API_KEY:
+        logger.error("CLAUDE_API_KEY is not configured")
+        return JSONResponse({"error": "API key not configured"}, status_code=500)
+
+    ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(ip):
+        return JSONResponse({"error": "リクエスト制限中です。1分後にお試しください。"}, status_code=429)
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        logger.error(f"[register] Invalid JSON body: {e}")
+        return JSONResponse({"error": "Invalid request body"}, status_code=400)
+
+    user_msg = body.get("message", "")
+    history = body.get("history", [])
+    collected = body.get("collected", {})
+
+    logger.info(f"[register] message={user_msg!r}, collected={collected}")
+
+    # Build messages for Claude
+    messages = []
+    for h in history[-10:]:
+        messages.append({"role": h["role"], "content": h["content"]})
+    # Add context about already collected data
+    context = f"\n\n【既に取得済みの情報】{json.dumps(collected, ensure_ascii=False)}" if any(v for v in collected.values()) else ""
+    messages.append({"role": "user", "content": user_msg + context})
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": CLAUDE_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": CLAUDE_MODEL,
+                    "max_tokens": 1024,
+                    "system": REGISTER_SYSTEM_PROMPT,
+                    "messages": messages,
+                },
+            )
+            logger.info(f"[register] Claude API status={resp.status_code}")
+
+            if resp.status_code != 200:
+                error_body = resp.text
+                logger.error(f"[register] Claude API error: {error_body}")
+                try:
+                    err_msg = resp.json().get("error", {}).get("message", "API error")
+                except Exception:
+                    err_msg = f"Claude API returned {resp.status_code}"
+                return JSONResponse({"error": err_msg, "reply": f"⚠️ APIエラー: {err_msg}"})
+
+            data = resp.json()
+            text = "".join(
+                b["text"] for b in data.get("content", []) if b.get("type") == "text"
+            ).strip()
+            logger.info(f"[register] Claude raw response: {text[:500]}")
+
+            # Parse JSON from response (handle markdown code blocks)
+            json_text = text
+            if json_text.startswith("```"):
+                json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
+                json_text = json_text.rsplit("```", 1)[0]
+
+            try:
+                result = json.loads(json_text)
+                return JSONResponse(result)
+            except json.JSONDecodeError as e:
+                logger.warning(f"[register] JSON parse failed: {e}, raw={text[:300]}")
+                # Fallback: return the raw text as reply
+                return JSONResponse({
+                    "reply": text,
+                    "extracted_data": None,
+                    "confirmed": False,
+                })
+
+    except httpx.TimeoutException:
+        logger.error("[register] Claude API timeout")
+        return JSONResponse({"error": "APIタイムアウト", "reply": "⚠️ タイムアウトしました。もう一度お試しください。"})
+    except Exception as e:
+        logger.error(f"[register] Unexpected error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e), "reply": f"⚠️ エラー: {e}"})
+
+
+FIXED_COST_SYSTEM_PROMPT = """あなたはKATANA AIの固定費管理アシスタントです。
+ユーザーが固定費の内訳を教えてくれたら、以下の勘定科目に分類して抽出してください。
+
+【勘定科目（日本会計基準）】
+- personnel: 人件費（給与・賞与・法定福利費・福利厚生費）
+- rent: 地代家賃（事務所・店舗の賃料）
+- utilities: 水道光熱費（電気・ガス・水道）
+- communication: 通信費（電話・インターネット・クラウドサービス）
+- lease: リース料（機器・車両のリース）
+- insurance: 保険料（火災保険・賠償保険等）
+- depreciation: 減価償却費（固定資産の減価償却）
+- interest: 支払利息（借入金の利息）
+- other: その他固定費（上記に該当しないもの）
+
+【ルール】
+- ユーザーの発言から該当する勘定科目を判断して金額を抽出してください
+- 曖昧な場合は確認してください
+- 金額は万円単位で返してください（「30万」→ 30）
+- 更新後の内訳一覧を見やすく表示してください
+
+【重要】回答はJSON形式で返してください。
+{
+  "reply": "ユーザーへの返答メッセージ",
+  "updated_costs": {
+    "personnel": 数値(万円) or null,
+    "rent": 数値(万円) or null,
+    "utilities": 数値(万円) or null,
+    "communication": 数値(万円) or null,
+    "lease": 数値(万円) or null,
+    "insurance": 数値(万円) or null,
+    "depreciation": 数値(万円) or null,
+    "interest": 数値(万円) or null,
+    "other": 数値(万円) or null
+  }
+}
+- updated_costsには今回変更・追加された項目のみ値を入れ、変更なしはnull
+"""
+
+@app.post("/api/chat/fixed-costs")
+async def chat_fixed_costs(request: Request):
+    if not CLAUDE_API_KEY:
+        return JSONResponse({"error": "API key not configured"}, status_code=500)
+
+    ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(ip):
+        return JSONResponse({"error": "リクエスト制限中です。1分後にお試しください。"}, status_code=429)
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        logger.error(f"[fixed-costs] Invalid JSON body: {e}")
+        return JSONResponse({"error": "Invalid request body"}, status_code=400)
+
+    user_msg = body.get("message", "")
+    history = body.get("history", [])
+    current_costs = body.get("current_costs", {})
+
+    messages = []
+    for h in history[-10:]:
+        messages.append({"role": h["role"], "content": h["content"]})
+    context = f"\n\n【現在の固定費設定】{json.dumps(current_costs, ensure_ascii=False)}"
+    messages.append({"role": "user", "content": user_msg + context})
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": CLAUDE_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": CLAUDE_MODEL,
+                    "max_tokens": 1024,
+                    "system": FIXED_COST_SYSTEM_PROMPT,
+                    "messages": messages,
+                },
+            )
+            if resp.status_code != 200:
+                error_body = resp.text
+                logger.error(f"[fixed-costs] Claude API error: {error_body}")
+                return JSONResponse({"error": "API error", "reply": "⚠️ APIエラーが発生しました"})
+
+            data = resp.json()
+            text = "".join(
+                b["text"] for b in data.get("content", []) if b.get("type") == "text"
+            ).strip()
+
+            json_text = text
+            if json_text.startswith("```"):
+                json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
+                json_text = json_text.rsplit("```", 1)[0]
+
+            try:
+                result = json.loads(json_text)
+                return JSONResponse(result)
+            except json.JSONDecodeError:
+                return JSONResponse({"reply": text, "updated_costs": None})
+
+    except httpx.TimeoutException:
+        return JSONResponse({"error": "タイムアウト", "reply": "⚠️ タイムアウトしました。"})
+    except Exception as e:
+        logger.error(f"[fixed-costs] Error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e), "reply": f"⚠️ エラー: {e}"})
+
+
+DATA_INPUT_SYSTEM_PROMPT = """あなたはKATANA AIのデータ入力アシスタントです。
+ユーザーの業種「{industry}」に合わせて、売上・コストデータを会話で収集します。
+会社名: {company_name}
+
+【業種別の収集項目】
+■ IT・開発: 案件名、取引先、受注額、原価、担当者
+■ 小売業: 商品カテゴリ名、月間売上額、原価率(%)
+■ 飲食業: メニューカテゴリ名、月間売上額、食材原価率(%)
+■ 建設業: 工事名、受注額、外注費
+■ 製造業: 製品名、月間売上額、材料原価率(%)
+■ サービス業: サービス名、月間売上額、原価率(%)
+
+【ルール】
+- 最初は売上データを聞く。業種に応じた具体例を示して聞く
+- ユーザーが「和菓子300万、洋菓子200万」のように答えたら、1件ずつClientデータとして抽出
+- 売上データの後は原価率を聞く
+- 原価率が分かったら、次に社員情報を聞く（名前、役職、月給）
+- 「以上」「終わり」「スキップ」→ input_complete: true
+- 既に登録済みのデータを重複登録しない
+- フレンドリーに。数字は具体的に確認する
+
+【重要】回答は必ずJSON形式のみ。JSON以外出力しない。
+{{
+  "reply": "ユーザーへの返答",
+  "actions": [
+    {{
+      "type": "ADD_CLIENT",
+      "data": {{
+        "id": "ユニークID(A,B,C...)",
+        "nm": "名前(カテゴリ名/取引先名)",
+        "fl": "正式名称",
+        "pj": "案件名/商品カテゴリ",
+        "amt": 売上額(円),
+        "cst": 原価(円),
+        "cm": 0,
+        "im": 0,
+        "pm": 1,
+        "ct": "担当者",
+        "staff": [],
+        "progress": 0,
+        "inv": []
+      }}
+    }},
+    {{
+      "type": "ADD_STAFF",
+      "data": {{
+        "id": "S001",
+        "name": "姓",
+        "full": "フルネーム",
+        "role": "役職",
+        "rate": 時給(円),
+        "salary": 月給(円)
+      }}
+    }}
+  ],
+  "input_complete": false
+}}
+
+- actionsは今回のメッセージで新たに抽出できたデータのみ入れる。なければ空配列[]
+- 売上額・原価は円単位（万円で言われたら×10000して円に変換）
+- 原価率で言われた場合: cst = amt × 原価率
+- cm/im/pm は月インデックス(0=4月, 1=5月, ... 11=3月)。小売・飲食は cm:0, im:0, pm:1 でOK
+- IT案件は契約月/請求月/入金月をそれぞれ聞くか、デフォルト cm:0, im:1, pm:3
+- input_complete は「以上」「終わり」「もうない」「完了」と言われた場合のみ true
+"""
+
+@app.post("/api/chat/data-input")
+async def chat_data_input(request: Request):
+    if not CLAUDE_API_KEY:
+        return JSONResponse({"error": "API key not configured"}, status_code=500)
+
+    ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(ip):
+        return JSONResponse({"error": "リクエスト制限中です。"}, status_code=429)
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        logger.error(f"[data-input] Invalid JSON body: {e}")
+        return JSONResponse({"error": "Invalid request body"}, status_code=400)
+
+    user_msg = body.get("message", "")
+    history = body.get("history", [])
+    industry = body.get("industry", "IT")
+    company_name = body.get("company_name", "")
+    current_clients = body.get("current_clients", [])
+    current_staff = body.get("current_staff", [])
+
+    logger.info(f"[data-input] industry={industry}, message={user_msg!r}")
+
+    # Build system prompt with industry context
+    system = DATA_INPUT_SYSTEM_PROMPT.format(
+        industry=industry,
+        company_name=company_name,
+    )
+
+    messages = []
+    for h in history[-10:]:
+        messages.append({"role": h["role"], "content": h["content"]})
+
+    # Add context about existing data
+    ctx_parts = []
+    if current_clients:
+        client_summary = ", ".join(f"{c.get('nm','')}(売上¥{c.get('amt',0):,})" for c in current_clients[:10])
+        ctx_parts.append(f"【登録済み売上データ】{client_summary}")
+    if current_staff:
+        staff_summary = ", ".join(f"{s.get('full','')}" for s in current_staff[:10])
+        ctx_parts.append(f"【登録済み社員】{staff_summary}")
+    context = "\n" + "\n".join(ctx_parts) if ctx_parts else ""
+
+    messages.append({"role": "user", "content": user_msg + context})
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": CLAUDE_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": CLAUDE_MODEL,
+                    "max_tokens": 2048,
+                    "system": system,
+                    "messages": messages,
+                },
+            )
+            logger.info(f"[data-input] Claude API status={resp.status_code}")
+
+            if resp.status_code != 200:
+                error_body = resp.text
+                logger.error(f"[data-input] Claude API error: {error_body}")
+                return JSONResponse({"error": "API error", "reply": "⚠️ APIエラーが発生しました", "actions": []})
+
+            data = resp.json()
+            text = "".join(
+                b["text"] for b in data.get("content", []) if b.get("type") == "text"
+            ).strip()
+            logger.info(f"[data-input] Claude raw: {text[:500]}")
+
+            json_text = text
+            if json_text.startswith("```"):
+                json_text = json_text.split("\n", 1)[1] if "\n" in json_text else json_text[3:]
+                json_text = json_text.rsplit("```", 1)[0]
+
+            try:
+                result = json.loads(json_text)
+                return JSONResponse(result)
+            except json.JSONDecodeError as e:
+                logger.warning(f"[data-input] JSON parse failed: {e}")
+                return JSONResponse({
+                    "reply": text,
+                    "actions": [],
+                    "input_complete": False,
+                })
+
+    except httpx.TimeoutException:
+        return JSONResponse({"error": "タイムアウト", "reply": "⚠️ タイムアウトしました。", "actions": []})
+    except Exception as e:
+        logger.error(f"[data-input] Error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e), "reply": f"⚠️ エラー: {e}", "actions": []})
+
 
 @app.post("/api/chat")
 async def chat_proxy(request: Request):

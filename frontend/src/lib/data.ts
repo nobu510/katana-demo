@@ -42,6 +42,31 @@ export type FixedAsset = {
   dep: number;
 };
 
+// 日本の勘定科目に準拠した固定費内訳
+export type FixedCostBreakdown = {
+  personnel: number;       // 人件費（給与・賞与・法定福利費・福利厚生費）
+  rent: number;            // 地代家賃
+  utilities: number;       // 水道光熱費
+  communication: number;   // 通信費
+  lease: number;           // リース料
+  insurance: number;       // 保険料
+  depreciation: number;    // 減価償却費
+  interest: number;        // 支払利息
+  other: number;           // その他固定費
+};
+
+export const FIXED_COST_LABELS: Record<keyof FixedCostBreakdown, string> = {
+  personnel: "人件費",
+  rent: "地代家賃",
+  utilities: "水道光熱費",
+  communication: "通信費",
+  lease: "リース料",
+  insurance: "保険料",
+  depreciation: "減価償却費",
+  interest: "支払利息",
+  other: "その他固定費",
+};
+
 export type ViewData = {
   rev: number;
   cost: number;
@@ -95,7 +120,24 @@ export type RagDoc = {
 
 // ===== CONSTANTS =====
 export const MO = ["4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "1月", "2月", "3月"];
-export const FX = 2800000;
+// デフォルト固定費内訳（IT企業想定）
+export const DEFAULT_FIXED_COSTS: FixedCostBreakdown = {
+  personnel: 1_600_000,    // 人件費
+  rent: 400_000,           // 地代家賃
+  utilities: 50_000,       // 水道光熱費
+  communication: 120_000,  // 通信費
+  lease: 80_000,           // リース料
+  insurance: 50_000,       // 保険料
+  depreciation: 300_000,   // 減価償却費
+  interest: 0,             // 支払利息
+  other: 200_000,          // その他固定費
+};
+
+export function fixedCostTotal(fc: FixedCostBreakdown): number {
+  return Object.values(fc).reduce((s, v) => s + v, 0);
+}
+
+export const FX = fixedCostTotal(DEFAULT_FIXED_COSTS); // 2,800,000
 export const TX = 0.3;
 export const TGT = 104000000;
 
@@ -210,7 +252,7 @@ export function gSC(s: "pd" | "iv" | "ct" | "pn"): string {
   return { pd: "b-pd", iv: "b-iv", ct: "b-ct", pn: "b-pn" }[s];
 }
 
-export function calc(clients: Client[], m: number, ocrAmount: number = 0): CalcResult {
+export function calc(clients: Client[], m: number, ocrAmount: number = 0, fixedCosts?: FixedCostBreakdown): CalcResult {
   const fu = { r: 0, c: 0, n: 0 };
   const nw = { r: 0, c: 0, n: 0 };
   const cf = { r: 0, c: 0, n: 0 };
@@ -224,7 +266,8 @@ export function calc(clients: Client[], m: number, ocrAmount: number = 0): CalcR
   function fin(d: { r: number; c: number; n: number }, mo: number): ViewData {
     const r = d.r + ocrAmount;
     const co = d.c;
-    const f = FX * mo;
+    const fx = fixedCosts ? fixedCostTotal(fixedCosts) : FX;
+    const f = fx * mo;
     const g = r - co - f;
     const t = Math.max(0, g * TX);
     return { rev: r, cost: co, fixed: f, tax: t, profit: g - t, cnt: d.n };

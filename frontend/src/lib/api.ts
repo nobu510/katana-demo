@@ -7,12 +7,22 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.error(`[apiPost] Network error: ${path}`, e);
+    throw new Error(`サーバーに接続できません (${API_BASE}${path})`);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error(`[apiPost] HTTP ${res.status}: ${path}`, text);
+    throw new Error(`API error: ${res.status} - ${text || res.statusText}`);
+  }
   return res.json();
 }
 

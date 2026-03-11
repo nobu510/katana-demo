@@ -4,10 +4,9 @@ import { useState } from "react";
 import { useApp } from "@/lib/store";
 
 export default function LoginScreen() {
-  const { state, dispatch } = useApp();
+  const { dispatch } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "register">("login");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -16,13 +15,15 @@ export default function LoginScreen() {
     setError("");
     setLoading(true);
 
-    // 仮ログイン: 何を入力してもログイン可能
     await new Promise((resolve) => setTimeout(resolve, 500));
 
+    // LOGIN が localStorage を直接読んで companyRegistered を決定する
     dispatch({ type: "LOGIN", email: email || "demo@katana.ai" });
 
-    if (state.companyRegistered) {
-      // 登録済みユーザー: 通常のウェルカムメッセージ
+    // localStorage に company_registered がなければ OnboardingChat へ
+    const isRegistered = localStorage.getItem("company_registered") === "1";
+
+    if (isRegistered) {
       dispatch({
         type: "ADD_MESSAGE",
         message: {
@@ -33,15 +34,6 @@ export default function LoginScreen() {
             { icon: "📷", label: "レシートスキャン", desc: "AI OCR自動読取", href: "/ocr" },
             { icon: "📝", label: "見積書を作成", desc: "手動 or AI生成", href: "/quote" },
           ],
-        },
-      });
-    } else {
-      // 新規ユーザー: オンボーディングメッセージ
-      dispatch({
-        type: "ADD_MESSAGE",
-        message: {
-          ai: true,
-          text: `こんにちは！KATANA AIです。御社の経営を一刀両断します。\nまず、どんなお仕事をされていますか？`,
         },
       });
     }
@@ -89,9 +81,7 @@ export default function LoginScreen() {
 
         {/* Form card */}
         <div className="bg-[#1a1a2e]/80 backdrop-blur-sm border border-white/10 rounded-2xl p-8">
-          <h2 className="text-lg font-bold text-white mb-6">
-            {mode === "login" ? "ログイン" : "新規登録"}
-          </h2>
+          <h2 className="text-lg font-bold text-white mb-6">ログイン</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -134,53 +124,13 @@ export default function LoginScreen() {
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  {mode === "login" ? "ログイン中..." : "登録中..."}
+                  ログイン中...
                 </span>
-              ) : mode === "login" ? (
-                "ログイン"
               ) : (
-                "アカウント作成"
+                "ログイン"
               )}
             </button>
           </form>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px bg-white/10" />
-            <span className="text-[11px] text-[#555]">または</span>
-            <div className="flex-1 h-px bg-white/10" />
-          </div>
-
-          {/* Toggle login/register */}
-          <div className="text-center">
-            {mode === "login" ? (
-              <p className="text-xs text-[#9ca3af]">
-                アカウントをお持ちでない方は{" "}
-                <button
-                  onClick={() => {
-                    setMode("register");
-                    setError("");
-                  }}
-                  className="text-[#6366f1] font-semibold hover:underline"
-                >
-                  新規登録
-                </button>
-              </p>
-            ) : (
-              <p className="text-xs text-[#9ca3af]">
-                既にアカウントをお持ちの方は{" "}
-                <button
-                  onClick={() => {
-                    setMode("login");
-                    setError("");
-                  }}
-                  className="text-[#6366f1] font-semibold hover:underline"
-                >
-                  ログイン
-                </button>
-              </p>
-            )}
-          </div>
         </div>
 
         {/* Footer */}

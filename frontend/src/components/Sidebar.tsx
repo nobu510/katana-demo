@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useApp } from "@/lib/store";
 
 type MenuItem = {
   icon: string;
@@ -31,6 +32,7 @@ const MENU: MenuItem[] = [
   { icon: "📊", label: "営業管理" },
   { icon: "📒", label: "会計帳簿" },
   { icon: "📋", label: "決算" },
+  { icon: "📋", label: "電子申請", href: "/e-filing" },
   { icon: "⚙️", label: "会計各種設定" },
   { icon: "📦", label: "在庫管理" },
   { icon: "💬", label: "社内チャット", href: "/chat" },
@@ -38,6 +40,7 @@ const MENU: MenuItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { state } = useApp();
   const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({ "書類": true });
 
   const toggleSub = (label: string) => {
@@ -129,9 +132,11 @@ export default function Sidebar() {
 
       {/* User */}
       <div className="px-4 py-3 border-t border-[#2a2a44] flex items-center gap-2.5 relative z-[1]">
-        <div className="w-8 h-8 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-[13px] font-bold">G</div>
+        <div className="w-8 h-8 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-[13px] font-bold">
+          {(state.companyName || "G").charAt(0)}
+        </div>
         <div>
-          <div className="text-white text-xs font-semibold">GOTO</div>
+          <div className="text-white text-xs font-semibold">{state.companyName || "GOTO"}</div>
           <div className="text-[#6b7280] text-[10px]">オーナー</div>
         </div>
       </div>

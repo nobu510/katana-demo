@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/store";
-import { calc, fF, gSt, gSL, MO, TGT, RAG, expenseDemo, type Client } from "@/lib/data";
-import { apiStreamChat } from "@/lib/api";
+import { calc, fF, gSt, gSL, MO, TGT, RAG, expenseDemo, FIXED_COST_LABELS, fixedCostTotal, type Client, type FixedCostBreakdown } from "@/lib/data";
+import { apiStreamChat, apiPost } from "@/lib/api";
 import StreamingText from "@/components/StreamingText";
 
 type RagResult = {
@@ -90,6 +90,19 @@ export default function ChatSidebar() {
   // Command detection matching HTML exactly
   const detectCmd = useCallback((q: string): string | null => {
     const { clients, staff, currentMonth: cm } = state;
+
+    // 固定費の表示
+    if ((q.includes("固定費") && (q.includes("見") || q.includes("確認") || q.includes("表示") || q.includes("内訳") || q.includes("いくら"))) ||
+        q === "固定費") {
+      const fc = state.fixedCosts;
+      const total = fixedCostTotal(fc);
+      const lines = Object.entries(FIXED_COST_LABELS)
+        .map(([k, label]) => {
+          const val = fc[k as keyof FixedCostBreakdown];
+          return val > 0 ? `  ${label}: ${fF(val)}` : null;
+        }).filter(Boolean).join("\n");
+      return `📊 現在の固定費内訳（月額）\n\n${lines || "  未設定"}\n\n合計: ${fF(total)}/月\n\n💡 内訳を変更するには「家賃を35万に変更」のように話しかけてください`;
+    }
 
     // Navigation commands
     if (q.includes("レシート") || q.includes("スキャン")) {
@@ -211,6 +224,139 @@ export default function ChatSidebar() {
     return null;
   }, [state, dispatch, router]);
 
+  // 固定費更新AI
+  const askFixedCostAI = useCallback(async (q: string) => {
+    dispatch({ type: "ADD_HISTORY", entry: { role: "user", content: q } });
+    dispatch({ type: "SET_TYPING", typing: true });
+    dispatch({ type: "ADD_MESSAGE", message: { ai: true, text: "" } });
+
+    try {
+      const currentCosts: Record<string, number> = {};
+      for (const [k, label] of Object.entries(FIXED_COST_LABELS)) {
+        currentCosts[label] = state.fixedCosts[k as keyof FixedCostBreakdown] / 10000; // 万円単位
+      }
+      const res = await apiPost<{ reply: string; updated_costs?: Record<string, number> | null }>("/api/chat/fixed-costs", {
+        message: q,
+        history: state.history.slice(-8),
+        current_costs: currentCosts,
+      });
+
+      if (res.updated_costs) {
+        const costs: Partial<FixedCostBreakdown> = {};
+        for (const [k, v] of Object.entries(res.updated_costs)) {
+          if (v != null) (costs as Record<string, number>)[k] = v * 10000; // 万円→円
+        }
+        dispatch({ type: "UPDATE_FIXED_COSTS", costs });
+      }
+
+      const reply = res.reply || "更新しました";
+      dispatch({ type: "UPDATE_LAST_MESSAGE", text: reply });
+      dispatch({ type: "SET_TYPING", typing: false });
+      dispatch({ type: "ADD_HISTORY", entry: { role: "assistant", content: reply } });
+    } catch (e) {
+      dispatch({ type: "SET_TYPING", typing: false });
+      dispatch({ type: "UPDATE_LAST_MESSAGE", text: "⚠️ " + (e instanceof Error ? e.message : "通信エラー") });
+    }
+  }, [state, dispatch]);
+
+  // データ入力AI（売上・経費・勤怠・社員の統合ハンドラ）
+  const askDataInputAI = useCallback(async (q: string) => {
+    dispatch({ type: "ADD_HISTORY", entry: { role: "user", content: q } });
+    dispatch({ type: "SET_TYPING", typing: true });
+    dispatch({ type: "ADD_MESSAGE", message: { ai: true, text: "" } });
+
+    try {
+      type DataInputAction = { type: string; data: Record<string, unknown> };
+      const res = await apiPost<{ reply: string; actions: DataInputAction[]; input_complete: boolean }>("/api/chat/data-input", {
+        message: q,
+        history: state.history.slice(-8),
+        industry: state.industry || "",
+        company_name: state.companyName || "",
+        current_clients: state.clients.map(c => ({ nm: c.nm, amt: c.amt, pj: c.pj, cst: c.cst, staff: c.staff })),
+        current_staff: state.staff.map(s => ({ name: s.name, full: s.full, role: s.role, rate: s.rate })),
+        fixed_costs: state.fixedCosts,
+      });
+
+      if (res.actions && res.actions.length > 0) {
+        for (const action of res.actions) {
+          if (action.type === "ADD_CLIENT" && action.data) {
+            const d = action.data;
+            dispatch({
+              type: "ADD_CLIENT",
+              client: {
+                id: String(d.id || String.fromCharCode(65 + state.clients.length)),
+                nm: String(d.nm || ""), fl: String(d.fl || d.nm || ""),
+                pj: String(d.pj || ""), amt: Number(d.amt) || 0, cst: Number(d.cst) || 0,
+                cm: Number(d.cm) ?? 0, im: Number(d.im) ?? 0, pm: Number(d.pm) ?? 1,
+                ct: String(d.ct || ""),
+                staff: Array.isArray(d.staff) ? d.staff as { name: string; hrs: number; rate: number }[] : [],
+                progress: Number(d.progress) || 0,
+                inv: Array.isArray(d.inv) ? d.inv as { item: string; qty: number; cost: number }[] : [],
+              },
+            });
+          } else if (action.type === "ADD_STAFF" && action.data) {
+            const d = action.data;
+            dispatch({
+              type: "ADD_STAFF",
+              staff: {
+                id: String(d.id || `S${String(state.staff.length + 1).padStart(3, "0")}`),
+                name: String(d.name || ""), full: String(d.full || ""),
+                role: String(d.role || ""), rate: Number(d.rate) || 0, salary: Number(d.salary) || 0,
+              },
+            });
+          } else if (action.type === "UPDATE_FIXED_COSTS" && action.data) {
+            const d = action.data;
+            const cat = String(d.category || "other");
+            const amtMan = Number(d.amount_man) || 0;
+            const costs: Partial<FixedCostBreakdown> = {};
+            const validKeys = ["personnel", "rent", "utilities", "communication", "lease", "insurance", "depreciation", "interest", "other"];
+            if (validKeys.includes(cat)) {
+              // 現在の値に加算（経費は累積）
+              const currentVal = state.fixedCosts[cat as keyof FixedCostBreakdown] || 0;
+              (costs as Record<string, number>)[cat] = currentVal + amtMan * 10000;
+              dispatch({ type: "UPDATE_FIXED_COSTS", costs });
+            }
+          } else if (action.type === "LOG_WORK" && action.data) {
+            const d = action.data;
+            const staffName = String(d.staff_name || "");
+            const clientNm = String(d.client_nm || "");
+            const hours = Number(d.hours) || 0;
+            if (staffName && clientNm && hours > 0) {
+              const clientIdx = state.clients.findIndex(c => c.nm.includes(clientNm) || clientNm.includes(c.nm));
+              if (clientIdx >= 0) {
+                const client = state.clients[clientIdx];
+                const existStaff = client.staff.find(s => s.name.includes(staffName) || staffName.includes(s.name));
+                const staffRecord = state.staff.find(s => s.name.includes(staffName) || s.full.includes(staffName));
+                const rate = staffRecord?.rate || existStaff?.rate || 2500;
+                let newStaffList;
+                if (existStaff) {
+                  newStaffList = client.staff.map(s =>
+                    s.name === existStaff.name ? { ...s, hrs: s.hrs + hours } : s
+                  );
+                } else {
+                  newStaffList = [...client.staff, { name: staffName, hrs: hours, rate }];
+                }
+                dispatch({ type: "UPDATE_CLIENT", index: clientIdx, client: { staff: newStaffList } });
+              }
+            }
+          }
+        }
+      }
+
+      if (res.input_complete) {
+        dispatch({ type: "SET_DATA_INPUT_DONE" });
+      }
+
+      const reply = res.reply || "データを登録しました。";
+      dispatch({ type: "UPDATE_LAST_MESSAGE", text: reply });
+      dispatch({ type: "SET_TYPING", typing: false });
+      dispatch({ type: "ADD_HISTORY", entry: { role: "assistant", content: reply } });
+    } catch (e) {
+      dispatch({ type: "SET_TYPING", typing: false });
+      dispatch({ type: "UPDATE_LAST_MESSAGE", text: "⚠️ " + (e instanceof Error ? e.message : "通信エラー") });
+    }
+  }, [state, dispatch]);
+
   // AI chat
   const askAI = useCallback(async (q: string) => {
     const { clients, staff, currentMonth: cm } = state;
@@ -257,6 +403,41 @@ export default function ChatSidebar() {
     }
   }, [state, dispatch]);
 
+  // ===== ルーティング判定ヘルパー =====
+
+  // データ入力・経費・勤怠の記録メッセージか？
+  const _isDataEntryMessage = useCallback((q: string): boolean => {
+    // 金額を含む → ほぼ確実にデータ入力
+    if (q.match(/\d+万/) || q.match(/\d+千/) || q.match(/\d+億/) || q.match(/\d{4,}円/)) return true;
+    // 経費キーワード + 「払った」「支払」等
+    const expenseWords = ["家賃", "賃料", "水道", "電気", "ガス", "光熱", "通信", "電話", "ネット", "AWS", "サーバー",
+      "リース", "レンタル", "保険", "交通費", "タクシー", "新幹線", "飛行機", "出張", "接待", "交際",
+      "広告", "宣伝", "消耗品", "文房具", "修繕", "研修", "会議", "手数料", "税金", "印紙", "顧問",
+      "外注", "仕入", "材料", "食材", "給与", "給料", "賞与", "ボーナス", "役員報酬"];
+    const payWords = ["払った", "払い", "支払", "かかった", "使った", "購入", "買った"];
+    if (expenseWords.some(kw => q.includes(kw)) && payWords.some(kw => q.includes(kw))) return true;
+    // 勤怠キーワード
+    if (q.match(/\d+時間/) || q.match(/\d+h/i)) return true;
+    if (q.includes("働いた") || q.includes("稼働") || q.includes("工数")) return true;
+    // 売上・案件・社員の登録
+    const dataWords = ["売上", "案件", "商品", "メニュー", "工事", "製品", "社員", "スタッフ", "カテゴリ", "原価率", "原価"];
+    const actionWords = ["登録", "追加", "入力", "記録", "計上"];
+    if (dataWords.some(kw => q.includes(kw)) && actionWords.some(kw => q.includes(kw))) return true;
+    // 固定費の変更
+    const fixedCostWords = ["家賃", "人件費", "光熱費", "通信費", "リース", "保険料", "減価償却", "支払利息"];
+    if (fixedCostWords.some(kw => q.includes(kw)) && (q.includes("変更") || q.includes("設定") || q.includes("更新"))) return true;
+    return false;
+  }, []);
+
+  // 分析・質問メッセージか？
+  const _isAnalysisQuestion = useCallback((q: string): boolean => {
+    const questionWords = ["儲", "利益", "いくら", "教えて", "分析", "状況", "どう", "3視点", "三視点"];
+    const questionMarks = ["？", "?"];
+    if (questionWords.some(kw => q.includes(kw))) return true;
+    if (questionMarks.some(kw => q.includes(kw))) return true;
+    return false;
+  }, []);
+
   // Send handler
   const sendChat = useCallback(async () => {
     const q = input.trim();
@@ -271,8 +452,33 @@ export default function ChatSidebar() {
       dispatch({ type: "ADD_MESSAGE", message: { ai: true, text: cmdResult } });
       return;
     }
+
+    // データ入力 or 質問のルーティング
+    // まずdata-input AIに送るべきかを判定
+    const isDataEntry = _isDataEntryMessage(q);
+    const isAnalysisQuestion = _isAnalysisQuestion(q);
+
+    // データ未入力時
+    if (state.clients.length === 0) {
+      if (isAnalysisQuestion && !isDataEntry) {
+        // データなしで質問 → 案内
+        await askDataInputAI(q);
+        return;
+      }
+      // それ以外は全てdata-input AIへ
+      await askDataInputAI(q);
+      return;
+    }
+
+    // データあり: data-input AIに送る条件
+    if (isDataEntry) {
+      await askDataInputAI(q);
+      return;
+    }
+
+    // 分析質問はストリーミングAIへ（リッチな回答）
     await askAI(q);
-  }, [input, state.typing, sideTab, detectCmd, askAI, dispatch, doRagSearch]);
+  }, [input, state, sideTab, detectCmd, askAI, askFixedCostAI, askDataInputAI, _isDataEntryMessage, _isAnalysisQuestion, dispatch, doRagSearch]);
 
   const openRagResult = useCallback((r: RagResult) => {
     setSideTab("chat");

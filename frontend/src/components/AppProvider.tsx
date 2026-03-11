@@ -2,7 +2,7 @@
 
 import { useReducer, useEffect, useState } from "react";
 import { AppContext, appReducer, type AppState } from "@/lib/store";
-import { initialClients, initialStaff } from "@/lib/data";
+import { initialClients, initialStaff, DEFAULT_FIXED_COSTS } from "@/lib/data";
 
 function createInitialState(registered: boolean): AppState {
   return {
@@ -11,8 +11,11 @@ function createInitialState(registered: boolean): AppState {
     authenticated: false,
     companyName: "",
     companyRegistered: registered,
-    clients: registered ? [...initialClients] : [],
-    staff: registered ? [...initialStaff] : [],
+    industry: "",
+    dataInputDone: false,
+    fixedCosts: DEFAULT_FIXED_COSTS,
+    clients: [],
+    staff: [],
     messages: [],
     history: [],
     ocrAmount: 0,
@@ -27,10 +30,11 @@ function createInitialState(registered: boolean): AppState {
 export default function AppProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [initState] = useState<AppState>(() => {
-    // SSR時はfalse、CSR時にlocalStorageチェック
     if (typeof window === "undefined") return createInitialState(false);
-    const registered = localStorage.getItem("company_registered") === "1";
-    return createInitialState(registered);
+    // デモ用: 毎回オンボーディングから開始（localStorageクリア）
+    localStorage.removeItem("company_registered");
+    localStorage.removeItem("company_name");
+    return createInitialState(false);
   });
   const [state, dispatch] = useReducer(appReducer, initState);
 

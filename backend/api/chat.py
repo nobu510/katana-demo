@@ -98,6 +98,273 @@ def _parse_registration_response(response: str) -> dict:
     }
 
 
+# ===== 業種別データ入力プロンプト =====
+_INDUSTRY_PROMPTS: dict[str, str] = {
+    "it": """【IT企業のデータ入力ガイド】
+ステップ1: 案件の売上データ（案件名、取引先名、受注額）
+ステップ2: 案件の原価（外注費、材料費）または原価率
+ステップ3: 社員情報（名前、役職、担当案件、時給、月給）
+
+案件データの変換ルール:
+- 受注額は円単位。「万」は×10000、「万円」も×10000
+- 契約月(cm)=0(4月), 請求月(im)=cm+2, 入金月(pm)=cm+4（最大11）
+- 原価(cst): 原価率指定時は受注額×原価率、指定なしは受注額×40%
+- 案件名(pj)はユーザーの発言から抽出
+- 取引先名(nm)はユーザーの発言から抽出。なければ案件名を使用
+
+例: 「A社のクラウド導入 480万」→ nm:"A社", pj:"クラウド導入", amt:4800000, cst:1920000""",
+
+    "retail": """【小売業のデータ入力ガイド】
+ステップ1: 商品カテゴリ別の売上データ（カテゴリ名と月間売上額）
+ステップ2: 各カテゴリの原価率
+ステップ3: 3視点を自動計算してレポート
+
+小売データの変換ルール:
+- 各カテゴリ→1つのclient（ADD_CLIENT）
+- nm=カテゴリ名, pj=カテゴリ名+"売上"
+- amt=月間売上額
+- cst=売上×原価率（原価率未指定時はデフォルト60%）
+- 小売は契約=請求=入金が同月: cm=0, im=0, pm=0
+- 原価率が伝えられたら、既存clientのcstを更新（UPDATE_COSTアクション）
+
+例: 「和菓子 300万、洋菓子 200万」→
+  ADD_CLIENT {nm:"和菓子", pj:"和菓子売上", amt:3000000, cst:1800000, cm:0, im:0, pm:0}
+  ADD_CLIENT {nm:"洋菓子", pj:"洋菓子売上", amt:2000000, cst:1200000, cm:0, im:0, pm:0}
+
+原価率更新例: 「和菓子 原価率45%」→
+  ADD_CLIENT {nm:"和菓子", amt:3000000, cst:1350000}（cstを再計算して上書き）""",
+
+    "restaurant": """【飲食業のデータ入力ガイド】
+ステップ1: メニューカテゴリ別売上（ランチ、ディナー、ドリンク、テイクアウト等）
+ステップ2: 食材原価率（FL比率）
+ステップ3: スタッフ情報
+
+変換ルール:
+- 各メニューカテゴリ→ADD_CLIENT
+- nm=カテゴリ名, pj=カテゴリ名+"売上"
+- 食材原価率: ランチ35%, ディナー30%, ドリンク20%（デフォルト）
+- cm=0, im=0, pm=0（即時売上）""",
+
+    "construction": """【建設業のデータ入力ガイド】
+ステップ1: 工事名、発注者、受注額
+ステップ2: 外注費・材料費
+ステップ3: 現場スタッフ
+
+変換ルール:
+- 各工事→ADD_CLIENT
+- nm=発注者名, pj=工事名
+- 建設は長期: cm=契約月, im=cm+3, pm=cm+6
+- 原価率デフォルト70%""",
+
+    "manufacturing": """【製造業のデータ入力ガイド】
+ステップ1: 製品名と売上額
+ステップ2: 材料費・加工費
+ステップ3: 生産スタッフ
+
+変換ルール:
+- 各製品→ADD_CLIENT
+- nm=製品名, pj=製品名+"製造"
+- 原価率デフォルト60%
+- cm=0, im=1, pm=2""",
+
+    "service": """【サービス業のデータ入力ガイド】
+ステップ1: サービス名と売上額
+ステップ2: 人件費・外注費
+ステップ3: スタッフ情報
+
+変換ルール:
+- 各サービス→ADD_CLIENT
+- nm=サービス名, pj=サービス名
+- 原価率デフォルト40%
+- cm=0, im=0, pm=1""",
+}
+
+DATA_INPUT_BASE_PROMPT = """あなたはKATANA AIの経営データアシスタントです。
+経営者がチャットで話すだけで、売上・経費・勤怠を全て自動記録します。
+経理知識ゼロの経営者が使うことを前提に、専門用語を使わず分かりやすく回答してください。
+
+{industry_guide}
+
+【対応する入力パターン】
+
+■ パターン1: 売上・案件の登録
+「今月売上300万」「A社のシステム開発 500万」「和菓子 300万、洋菓子 200万」
+→ ADD_CLIENT アクションで登録
+
+■ パターン2: 経費・支払いの記録
+「家賃30万払った」「タクシー代2340円」「AWS利用料4万8千円」「交際費3万2千円」
+→ UPDATE_FIXED_COSTS アクションで固定費に反映
+  - 家賃/賃料 → rent
+  - 水道/電気/ガス/光熱 → utilities
+  - 電話/ネット/通信/AWS/サーバー → communication
+  - リース/レンタル → lease
+  - 保険料 → insurance
+  - 給与/給料/月給/人件費 → personnel
+  - 利息/金利 → interest
+  - 減価償却 → depreciation
+  - その他（交通費/交際費/消耗品/研修等） → other
+
+■ パターン3: 勤怠・工数の記録
+「田中が5時間A案件で働いた」「佐藤 A社 8h」「今日 田中 3時間」
+→ LOG_WORK アクション: 指定の社員を指定の案件に工数追加
+
+■ パターン4: 原価率の更新
+「和菓子 原価率45%」「A社の原価率は40%」
+→ 既存clientのcstを再計算してADD_CLIENTで上書き
+
+■ パターン5: 社員の追加
+「田中太郎、エンジニア、月給45万」
+→ ADD_STAFF アクション
+
+■ パターン6: 質問・分析
+「4月儲かってる？」「利益いくら？」「売上教えて」
+→ actionsは空配列、replyで回答。登録済みデータから計算:
+  - 売上合計 = 全clientのamt合計
+  - 原価合計 = 全clientのcst合計
+  - 粗利 = 売上 - 原価
+  - 固定費はシステム情報から参照
+  - 利益 = 粗利 - 固定費
+  - データが無い場合 → 「まだデータがありません。まずは売上データを入力しましょう！」
+
+【金額変換ルール】
+- 「万」「万円」→ ×10000（300万→3000000）
+- 「千円」→ ×1000
+- 「億」→ ×100000000
+- 数字のみ → そのまま円単位
+
+【会話ルール】
+- 一度に複数のデータが含まれていたら全て抽出する
+- データ登録後は必ず登録内容を簡潔に確認し、次に必要なデータを案内する
+- 売上入力後 → 「原価率も教えていただけると、利益を計算できます」
+- 経費記録後 → 「記録しました。月の固定費に反映しました」
+- 質問に回答する際は具体的な数字で回答する
+- 「完了」「OK」「以上」等で入力終了 → input_complete: true
+
+【重要】必ず回答の最後に以下のJSONタグを出力してください（ユーザーには見えません）:
+<data_actions>
+{{
+  "reply": "ユーザーに見せるメッセージ",
+  "actions": [
+    {{"type": "ADD_CLIENT", "data": {{"nm": "名前", "fl": "正式名称", "pj": "案件名", "amt": 金額, "cst": 原価, "cm": 0, "im": 0, "pm": 1, "ct": "", "staff": [], "progress": 0, "inv": []}} }},
+    {{"type": "ADD_STAFF", "data": {{"name": "姓", "full": "フルネーム", "role": "役職", "rate": 時給, "salary": 月給}} }},
+    {{"type": "UPDATE_FIXED_COSTS", "data": {{"category": "rent", "amount_man": 30}} }},
+    {{"type": "LOG_WORK", "data": {{"staff_name": "田中", "client_nm": "A社", "hours": 5}} }}
+  ],
+  "input_complete": false
+}}
+</data_actions>
+
+actionsが不要な場合は空配列[]にしてください。
+UPDATE_FIXED_COSTSのamount_manは万円単位です。
+LOG_WORKはstaff_nameに社員の姓、client_nmに案件/取引先名、hoursに時間を入れます。
+"""
+
+def _build_data_input_prompt(industry: str) -> str:
+    """業種に応じたデータ入力プロンプトを構築"""
+    industry_lower = industry.lower()
+    # 業種キーワードマッチ
+    guide = _INDUSTRY_PROMPTS.get("it", "")  # default
+    for key, prompt in _INDUSTRY_PROMPTS.items():
+        if key in industry_lower:
+            guide = prompt
+            break
+    # キーワード部分マッチ
+    keyword_map = {
+        "it": ["it", "ソフトウェア", "開発", "システム", "saas", "ai", "テック", "受託"],
+        "retail": ["小売", "スーパー", "食品", "ドラッグ", "コンビニ", "専門店", "物販", "販売", "ec", "和菓子", "洋菓子", "菓子"],
+        "restaurant": ["飲食", "レストラン", "カフェ", "居酒屋", "食堂", "料理"],
+        "construction": ["建設", "工事", "建築", "土木", "リフォーム", "施工"],
+        "manufacturing": ["製造", "工場", "加工", "組立", "部品", "生産"],
+        "service": ["サービス", "人材", "派遣", "教育", "研修", "コンサル"],
+    }
+    for key, keywords in keyword_map.items():
+        if any(kw in industry_lower for kw in keywords):
+            guide = _INDUSTRY_PROMPTS[key]
+            break
+    return DATA_INPUT_BASE_PROMPT.format(industry_guide=guide)
+
+
+def _parse_data_input_response(response: str) -> dict:
+    """データ入力応答から<data_actions>タグをパース"""
+    reply = response
+    actions = []
+    input_complete = False
+
+    match = re.search(r"<data_actions>(.*?)</data_actions>", response, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group(1))
+            reply = data.get("reply", reply)
+            actions = data.get("actions", [])
+            input_complete = data.get("input_complete", False)
+        except (json.JSONDecodeError, ValueError):
+            pass
+        # タグ部分を除去（replyが抽出できなかった場合のフォールバック）
+        if reply == response:
+            reply = re.sub(r"\s*<data_actions>.*?</data_actions>\s*", "", reply, flags=re.DOTALL).strip()
+
+    return {
+        "reply": reply,
+        "actions": actions,
+        "input_complete": input_complete,
+    }
+
+
+# ===== 固定費更新プロンプト =====
+FIXED_COST_SYSTEM_PROMPT = """あなたはKATANA AIの固定費管理アシスタントです。
+ユーザーの指示に基づいて固定費の内訳を更新します。
+
+【固定費の9つの勘定科目】
+- personnel: 人件費（給与・賞与・法定福利費）
+- rent: 地代家賃
+- utilities: 水道光熱費
+- communication: 通信費
+- lease: リース料
+- insurance: 保険料
+- depreciation: 減価償却費
+- interest: 支払利息
+- other: その他固定費
+
+【ルール】
+- ユーザーの指示を適切な勘定科目に分類
+- 金額は万円単位で扱う（「35万」→35）
+- 変更した項目のみupdated_costsに含める
+- 変更しない項目は含めない
+
+【重要】回答の最後に以下のタグを出力:
+<fixed_cost_update>
+{
+  "reply": "変更内容の確認メッセージ",
+  "updated_costs": {"rent": 35, "utilities": 8}
+}
+</fixed_cost_update>
+
+更新不要の場合はupdated_costsをnullにしてください。
+"""
+
+
+def _parse_fixed_cost_response(response: str) -> dict:
+    """固定費応答をパース"""
+    reply = response
+    updated_costs = None
+
+    match = re.search(r"<fixed_cost_update>(.*?)</fixed_cost_update>", response, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group(1))
+            reply = data.get("reply", reply)
+            updated_costs = data.get("updated_costs")
+        except (json.JSONDecodeError, ValueError):
+            pass
+        if reply == response:
+            reply = re.sub(r"\s*<fixed_cost_update>.*?</fixed_cost_update>\s*", "", reply, flags=re.DOTALL).strip()
+
+    return {
+        "reply": reply,
+        "updated_costs": updated_costs,
+    }
+
+
 def create_chat_router(
     claude: ClaudeClient,
     system_prompt: str,
@@ -191,6 +458,101 @@ def create_chat_router(
                 max_tokens=1024,
             )
             result = _parse_registration_response(response)
+            return JSONResponse(result)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ===== データ入力エンドポイント =====
+    @router.post("/api/chat/data-input")
+    async def chat_data_input(request: Request):
+        """業種別データ入力会話（売上→原価→3視点計算）"""
+        body = await request.json()
+        industry = body.get("industry", "")
+        company_name = body.get("company_name", "")
+        current_clients = body.get("current_clients", [])
+        current_staff = body.get("current_staff", [])
+
+        if not claude.api_key:
+            # API未設定時のモック応答
+            return JSONResponse({
+                "reply": "売上データを入力してください。",
+                "actions": [],
+                "input_complete": False,
+            })
+
+        ip = request.client.host if request.client else "unknown"
+        if not rate_limiter(ip):
+            return JSONResponse(
+                {"error": "リクエスト制限中です。1分後にお試しください。"},
+                status_code=429,
+            )
+
+        messages = []
+        for h in body.get("history", [])[-12:]:
+            messages.append({"role": h["role"], "content": h["content"]})
+
+        fixed_costs = body.get("fixed_costs", {})
+        user_msg = body.get("message", "")
+        # 現在のデータ状態をコンテキストとして追加
+        context = f"\n\n[システム情報]\n会社名: {company_name}\n業種: {industry}"
+        if current_clients:
+            context += f"\n登録済み売上/案件: {json.dumps(current_clients, ensure_ascii=False)}"
+        if current_staff:
+            context += f"\n登録済み社員: {json.dumps(current_staff, ensure_ascii=False)}"
+        if fixed_costs:
+            # 万円単位に変換して表示
+            fc_display = {k: v / 10000 for k, v in fixed_costs.items() if isinstance(v, (int, float)) and v > 0}
+            if fc_display:
+                context += f"\n現在の月額固定費(万円): {json.dumps(fc_display, ensure_ascii=False)}"
+        messages.append({"role": "user", "content": user_msg + context})
+
+        prompt = _build_data_input_prompt(industry)
+
+        try:
+            response = await claude.single_request(
+                messages=messages,
+                system_prompt=prompt,
+                max_tokens=2048,
+            )
+            result = _parse_data_input_response(response)
+            return JSONResponse(result)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ===== 固定費更新エンドポイント =====
+    @router.post("/api/chat/fixed-costs")
+    async def chat_fixed_costs(request: Request):
+        """固定費の内訳変更"""
+        if not claude.api_key:
+            return JSONResponse({
+                "reply": "固定費を更新しました。",
+                "updated_costs": None,
+            })
+
+        ip = request.client.host if request.client else "unknown"
+        if not rate_limiter(ip):
+            return JSONResponse(
+                {"error": "リクエスト制限中です。"},
+                status_code=429,
+            )
+
+        body = await request.json()
+        messages = []
+        for h in body.get("history", [])[-8:]:
+            messages.append({"role": h["role"], "content": h["content"]})
+
+        current_costs = body.get("current_costs", {})
+        user_msg = body.get("message", "")
+        context = f"\n\n[現在の固定費（万円）]: {json.dumps(current_costs, ensure_ascii=False)}"
+        messages.append({"role": "user", "content": user_msg + context})
+
+        try:
+            response = await claude.single_request(
+                messages=messages,
+                system_prompt=FIXED_COST_SYSTEM_PROMPT,
+                max_tokens=1024,
+            )
+            result = _parse_fixed_cost_response(response)
             return JSONResponse(result)
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)

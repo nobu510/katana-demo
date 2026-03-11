@@ -10,15 +10,17 @@ import OnboardingChat from "@/components/OnboardingChat";
 export default function LayoutContent({ children }: { children: React.ReactNode }) {
   const { state } = useApp();
 
+  // 未ログイン → ログイン画面
   if (!state.authenticated) {
     return <LoginScreen />;
   }
 
-  // 企業未登録 → 全画面チャット（オンボーディング）
+  // 企業未登録 → OnboardingChat を全画面表示
   if (!state.companyRegistered) {
     return <OnboardingChat />;
   }
 
+  // 登録済み → サイドバー + ダッシュボード + チャットパネル
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
