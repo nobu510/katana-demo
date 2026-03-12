@@ -5,11 +5,14 @@
 """
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum
 from typing import Sequence
+
+from .numbering_engine import NumberingState, generate_journal_id
 
 
 # =====================================================================
@@ -196,6 +199,9 @@ class JournalLine:
 class JournalEntry:
     """仕訳伝票"""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    numbering_id: str = ""   # J001-C001 形式の採番ID
+    company_id: str = ""     # C001 形式の企業ID
+    project_id: str = ""     # P001-C001 形式の案件ID (紐づく場合)
     entry_date: date = field(default_factory=date.today)
     description: str = ""
     lines: list[JournalLine] = field(default_factory=list)
@@ -253,6 +259,24 @@ class JournalTemplate:
     tax_applicable: bool = True  # 消費税対象か
     category: str = ""           # "売上", "仕入", "経費", "給与", "資産" 等
 
+    def _is_purchase_type(self) -> bool:
+        """仕入・経費・資産取得 → 仮払消費税"""
+        if self.debit_account.category == AccountCategory.EXPENSE:
+            return True
+        # 固定資産取得 (TOOLS, SOFTWARE 等)
+        if (self.debit_account.category == AccountCategory.ASSET
+                and self.debit_account.sub_category in (
+                    "有形固定資産", "無形固定資産", "流動資産")
+                and self.debit_account.tax_category != "不課税"):
+            return True
+        if self.category in ("仕入", "経費", "資産"):
+            return True
+        return False
+
+    def _is_sale_type(self) -> bool:
+        """売上 → 仮受消費税"""
+        return self.credit_account.category == AccountCategory.REVENUE
+
     def generate(
         self,
         amount: int,
@@ -261,32 +285,46 @@ class JournalTemplate:
         sub_account: str = "",
         source_text: str = "",
         include_tax: bool = True,
+        tax_rate: float = 0.10,
+        payment_method: str = "bank",  # "bank" or "cash"
     ) -> JournalEntry:
-        """テンプレートから仕訳を生成"""
+        """
+        テンプレートから仕訳を生成。
+
+        税込金額を受け取り、本体+消費税に分解して複式簿記仕訳を作る。
+        - 仕入/経費/資産取得 → 仮払消費税 (借方)
+        - 売上 → 仮受消費税 (貸方)
+        - 不課税/非課税 → 税行なし
+
+        payment_method: "cash" → 現金勘定, "bank" → 普通預金勘定
+        """
         dt = entry_date or date.today()
         fiscal_month = (dt.month - 4) % 12  # 4月=0
 
+        # 支払方法による貸方勘定の差し替え
+        credit_acct = self.credit_account
+        if payment_method == "cash" and self.credit_account == DEPOSITS:
+            credit_acct = CASH
+        debit_acct = self.debit_account
+        if payment_method == "cash" and self.debit_account == DEPOSITS:
+            debit_acct = CASH
+
         lines: list[JournalLine] = []
 
-        if self.tax_applicable and include_tax:
-            # 税込金額 → 本体 + 消費税10%
-            tax = amount - amount * 1000 // 1100  # 内税計算
+        if self.tax_applicable and include_tax and tax_rate > 0:
+            # 税込金額 → 本体 + 消費税 (内税計算)
+            tax_denom = int(round((1 + tax_rate) * 1000))
+            tax = amount - amount * 1000 // tax_denom
             body = amount - tax
 
-            lines.append(JournalLine(
-                account=self.debit_account,
-                debit=body,
-                sub_account=sub_account,
-                memo=description,
-            ))
-            # 仮払消費税 or 仮受消費税
-            if self.debit_account.category == AccountCategory.EXPENSE:
+            if self._is_sale_type():
+                # 売上系: 借方に税込金額、貸方に本体+仮受消費税
                 lines.append(JournalLine(
-                    account=CONSUMPTION_TAX_RCV,
-                    debit=tax,
-                    memo=f"消費税({description})",
+                    account=debit_acct,
+                    debit=amount,
+                    sub_account=sub_account,
+                    memo=description,
                 ))
-            elif self.credit_account.category == AccountCategory.REVENUE:
                 lines.append(JournalLine(
                     account=self.credit_account,
                     credit=body,
@@ -298,39 +336,49 @@ class JournalTemplate:
                     credit=tax,
                     memo=f"消費税({description})",
                 ))
-                # 売上系は借方にも追加が必要
-                lines[0] = JournalLine(
+            elif self._is_purchase_type():
+                # 仕入/経費/資産取得: 借方に本体+仮払消費税、貸方に税込金額
+                lines.append(JournalLine(
                     account=self.debit_account,
-                    debit=amount,  # 税込で売掛金
+                    debit=body,
                     sub_account=sub_account,
                     memo=description,
-                )
-                return JournalEntry(
-                    entry_date=dt,
-                    description=description or self.description,
-                    lines=lines,
-                    source="chat",
-                    source_text=source_text,
-                    fiscal_year=dt.year if dt.month >= 4 else dt.year - 1,
-                    fiscal_month=fiscal_month,
-                )
-
-            lines.append(JournalLine(
-                account=self.credit_account,
-                credit=amount,  # 税込で支払
-                sub_account=sub_account,
-                memo=description,
-            ))
+                ))
+                lines.append(JournalLine(
+                    account=CONSUMPTION_TAX_RCV,
+                    debit=tax,
+                    memo=f"消費税({description})",
+                ))
+                lines.append(JournalLine(
+                    account=credit_acct,
+                    credit=amount,
+                    sub_account=sub_account,
+                    memo=description,
+                ))
+            else:
+                # 課税だがどちらにも当てはまらない場合 → 単純仕訳
+                lines.append(JournalLine(
+                    account=debit_acct,
+                    debit=amount,
+                    sub_account=sub_account,
+                    memo=description,
+                ))
+                lines.append(JournalLine(
+                    account=credit_acct,
+                    credit=amount,
+                    sub_account=sub_account,
+                    memo=description,
+                ))
         else:
-            # 不課税取引
+            # 不課税・非課税取引
             lines.append(JournalLine(
-                account=self.debit_account,
+                account=debit_acct,
                 debit=amount,
                 sub_account=sub_account,
                 memo=description,
             ))
             lines.append(JournalLine(
-                account=self.credit_account,
+                account=credit_acct,
                 credit=amount,
                 sub_account=sub_account,
                 memo=description,
@@ -615,15 +663,40 @@ TEMPLATES: list[JournalTemplate] = [
 ]
 
 
+@dataclass
+class TemplateMatch:
+    """テンプレートマッチ結果"""
+    template: JournalTemplate
+    score: int            # マッチしたキーワード数
+    confidence: float     # 0.0 ~ 1.0
+    matched_keywords: list[str]
+
+
 def find_template(text: str) -> JournalTemplate | None:
     """テキストからマッチするテンプレートを探す（スコア最高のもの）"""
-    best: JournalTemplate | None = None
+    result = find_template_with_score(text)
+    return result.template if result else None
+
+
+def find_template_with_score(text: str) -> TemplateMatch | None:
+    """テキストからマッチするテンプレートをスコア付きで探す"""
+    best: TemplateMatch | None = None
     best_score = 0
+
     for tmpl in TEMPLATES:
-        score = sum(1 for kw in tmpl.keywords if kw in text)
+        matched = [kw for kw in tmpl.keywords if kw in text]
+        score = len(matched)
         if score > best_score:
             best_score = score
-            best = tmpl
+            # 信頼度: マッチ数 / キーワード総数 (最低でもマッチ1で0.3以上)
+            confidence = min(1.0, score / max(len(tmpl.keywords), 1) + 0.2 * (score - 1))
+            best = TemplateMatch(
+                template=tmpl,
+                score=score,
+                confidence=round(confidence, 2),
+                matched_keywords=matched,
+            )
+
     return best
 
 
@@ -875,15 +948,29 @@ class JournalEngine:
         # result = { "entry": JournalEntry, "template": "売上計上", "confidence": 0.9 }
     """
 
-    def __init__(self) -> None:
+    def __init__(self, company_id: str = "") -> None:
         self.ledger = JournalLedger()
         self._templates = TEMPLATES
+        self.company_id = company_id
+        self._numbering_state = NumberingState()
+
+    def _assign_numbering(self, entry: JournalEntry) -> JournalEntry:
+        """仕訳に採番IDを付与"""
+        if self.company_id:
+            nid, self._numbering_state = generate_journal_id(
+                self._numbering_state, self.company_id
+            )
+            entry.numbering_id = nid.id
+            entry.company_id = self.company_id
+        return entry
 
     def process_chat(
         self,
         text: str,
         entry_date: date | None = None,
         sub_account: str = "",
+        project_id: str = "",
+        payment_method: str = "",  # "cash", "bank", "" (自動検出)
     ) -> dict:
         """
         チャットテキストから仕訳を自動生成
@@ -893,9 +980,12 @@ class JournalEngine:
                 "success": bool,
                 "entry": JournalEntry | None,
                 "template_name": str,
+                "confidence": float,  # テンプレートマッチの信頼度
                 "description": str,
                 "errors": list[str],
                 "amount": int,
+                "detected_date": str | None,  # テキストから検出した日付
+                "payment_method": str,
                 "needs_ai": bool,  # AI判定が必要かどうか
             }
         """
@@ -906,36 +996,62 @@ class JournalEngine:
                 "success": False,
                 "entry": None,
                 "template_name": "",
+                "confidence": 0.0,
                 "description": "金額を読み取れませんでした",
                 "errors": ["金額が含まれていません"],
                 "amount": 0,
+                "detected_date": None,
+                "payment_method": "",
                 "needs_ai": True,
             }
 
-        # テンプレートマッチ
-        tmpl = find_template(text)
-        if not tmpl:
+        # 日付を抽出 (明示的に渡されていない場合)
+        detected_date = self._extract_date(text) if not entry_date else None
+        effective_date = entry_date or detected_date
+
+        # テンプレートマッチ (スコア付き)
+        match = find_template_with_score(text)
+        if not match:
             return {
                 "success": False,
                 "entry": None,
                 "template_name": "",
+                "confidence": 0.0,
                 "description": "仕訳パターンを特定できませんでした",
                 "errors": ["該当する仕訳テンプレートが見つかりません"],
                 "amount": amount,
+                "detected_date": detected_date.isoformat() if detected_date else None,
+                "payment_method": "",
                 "needs_ai": True,
             }
+
+        tmpl = match.template
+
+        # 支払方法の自動検出
+        if not payment_method:
+            payment_method = self._detect_payment_method(text)
 
         # 取引先名を抽出（「」内など）
         detected_sub = sub_account or self._extract_sub_account(text)
 
+        # 軽減税率の検出
+        tax_rate = 0.08 if self._is_reduced_tax(text) else 0.10
+
         # 仕訳を生成
         entry = tmpl.generate(
             amount=amount,
-            entry_date=entry_date,
+            entry_date=effective_date,
             description=self._build_description(tmpl, text, detected_sub),
             sub_account=detected_sub,
             source_text=text,
+            payment_method=payment_method or "bank",
+            tax_rate=tax_rate,
         )
+
+        # 採番・案件紐づけ
+        self._assign_numbering(entry)
+        if project_id:
+            entry.project_id = project_id
 
         # 帳簿に追加
         errors = self.ledger.add(entry)
@@ -944,9 +1060,12 @@ class JournalEngine:
                 "success": False,
                 "entry": entry,
                 "template_name": tmpl.name,
+                "confidence": match.confidence,
                 "description": f"仕訳エラー: {', '.join(errors)}",
                 "errors": errors,
                 "amount": amount,
+                "detected_date": detected_date.isoformat() if detected_date else None,
+                "payment_method": payment_method,
                 "needs_ai": False,
             }
 
@@ -954,10 +1073,13 @@ class JournalEngine:
             "success": True,
             "entry": entry,
             "template_name": tmpl.name,
+            "confidence": match.confidence,
             "description": self._format_entry_summary(entry),
             "errors": [],
             "amount": amount,
-            "needs_ai": False,
+            "detected_date": detected_date.isoformat() if detected_date else None,
+            "payment_method": payment_method,
+            "needs_ai": match.confidence < 0.3,
         }
 
     def add_entry(self, entry: JournalEntry) -> list[str]:
@@ -990,16 +1112,24 @@ class JournalEngine:
 
     @staticmethod
     def _extract_amount(text: str) -> int:
-        """テキストから金額を抽出"""
-        import re
-        # 「300万円」「300万」「3,000,000円」「3000000」
+        """
+        テキストから金額を抽出。
+
+        対応パターン:
+          - 3億円, 1.5億
+          - 300万円, 300万
+          - 3,000,000円
+          - 50000円, 500円, 100円
+          - ¥3000, ￥5000
+        """
         patterns = [
             (r"(\d+(?:\.\d+)?)\s*億円?", 100_000_000),
             (r"(\d+(?:\.\d+)?)\s*千万円?", 10_000_000),
             (r"(\d+(?:\.\d+)?)\s*百万円?", 1_000_000),
             (r"(\d+(?:\.\d+)?)\s*万円?", 10_000),
             (r"(\d{1,3}(?:,\d{3})+)\s*円?", 1),
-            (r"(\d{4,})\s*円?", 1),
+            (r"[¥￥]\s*(\d+(?:,\d{3})*)", 1),
+            (r"(\d+)\s*円", 1),  # 「500円」「100円」も対応
         ]
         for pat, mult in patterns:
             m = re.search(pat, text)
@@ -1009,9 +1139,45 @@ class JournalEngine:
         return 0
 
     @staticmethod
+    def _extract_date(text: str) -> date | None:
+        """
+        テキストから日付を抽出。
+
+        対応パターン:
+          - 2024年6月15日, 2024/6/15, 2024-06-15
+          - 6月15日, 6/15 (今年として解釈)
+          - 今日, 昨日, 先月
+        """
+        # フル日付: 2024年6月15日, 2024/6/15
+        m = re.search(r'(\d{4})[年/\-](\d{1,2})[月/\-](\d{1,2})日?', text)
+        if m:
+            try:
+                return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                pass
+
+        # 月日のみ: 6月15日, 6/15
+        m = re.search(r'(\d{1,2})[月/](\d{1,2})日?', text)
+        if m:
+            try:
+                today = date.today()
+                return date(today.year, int(m.group(1)), int(m.group(2)))
+            except ValueError:
+                pass
+
+        # 相対日付
+        if '昨日' in text:
+            from datetime import timedelta
+            return date.today() - timedelta(days=1)
+        if '一昨日' in text:
+            from datetime import timedelta
+            return date.today() - timedelta(days=2)
+
+        return None
+
+    @staticmethod
     def _extract_sub_account(text: str) -> str:
         """テキストから取引先名を抽出"""
-        import re
         # 「A社」「株式会社○○」
         m = re.search(r"「(.+?)」", text)
         if m:
@@ -1023,6 +1189,25 @@ class JournalEngine:
         if m:
             return m.group(1)
         return ""
+
+    @staticmethod
+    def _detect_payment_method(text: str) -> str:
+        """テキストから支払方法を検出"""
+        if re.search(r'(現金|キャッシュ|cash)', text, re.IGNORECASE):
+            return "cash"
+        if re.search(r'(振込|口座|銀行|引き落とし|カード|クレジット)', text):
+            return "bank"
+        return "bank"  # デフォルトは銀行振込
+
+    @staticmethod
+    def _is_reduced_tax(text: str) -> bool:
+        """軽減税率(8%)対象かどうかを判定"""
+        reduced_keywords = [
+            "食品", "飲料", "食料", "食材", "弁当", "おにぎり",
+            "新聞", "定期購読",  # 週2回以上発行の新聞
+            "テイクアウト", "持ち帰り",
+        ]
+        return any(kw in text for kw in reduced_keywords)
 
     @staticmethod
     def _build_description(tmpl: JournalTemplate, text: str, sub: str) -> str:
